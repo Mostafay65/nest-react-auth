@@ -1,0 +1,46 @@
+{
+  "name": "nest-react-auth",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sign-up and sign-in module: a NestJS + MongoDB API and a React + TypeScript client.",
+  "type": "module",
+  "workspaces": [
+    "packages/contracts",
+    "apps/api",
+    "apps/web",
+    "e2e"
+  ],
+  "engines": {
+    "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
+  },
+  "scripts": {
+    "postinstall": "npm run build -w @nest-react-auth/contracts",
+    "dev": "concurrently --kill-others-on-fail --names contracts,api,web --prefix-colors gray,blue,magenta \"npm run dev -w @nest-react-auth/contracts\" \"npm run start:dev -w @nest-react-auth/api\" \"npm run dev -w @nest-react-auth/web\"",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run test:e2e -w @nest-react-auth/api",
+    "test:browser": "npm run test:browser -w @nest-react-auth/e2e",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:up": "docker compose up -d --wait mongo",
+    "stack:up": "docker compose up -d --build --wait",
+    "stack:down": "docker compose down",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs,cjs,json,css,md,yml,yaml,html}": "prettier --write"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.7",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10"
+  },
+  "allowScripts": {
+    "argon2@0.45.2": true,
+    "mongodb-memory-server": false,
+    "@scarf/scarf": false
+  }
+}
