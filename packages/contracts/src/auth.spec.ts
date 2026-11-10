@@ -82,6 +82,13 @@ describe('signUpSchema', () => {
     ]);
   });
 
+  it.each([undefined, null, 'text', []])('asks for a JSON object when the body is %j', (body) => {
+    const result = signUpSchema.safeParse(body);
+    expect(messagesFor(result)).toEqual([
+      { field: '', message: 'The request body must be a JSON object' },
+    ]);
+  });
+
   it('rejects unknown fields instead of silently dropping them', () => {
     const result = signUpSchema.safeParse({ ...validSignUp, role: 'admin' });
     expect(result.success).toBe(false);
