@@ -34,4 +34,14 @@ describe('PasswordHasher', () => {
     // The throwaway hash is made once and reused.
     expect(hashSpy).toHaveBeenCalledOnce();
   });
+
+  it('prepares the throwaway hash at startup, so the first unknown email is not slower', async () => {
+    const freshHasher = new PasswordHasher();
+    await freshHasher.onModuleInit();
+    const hashSpy = vi.spyOn(freshHasher, 'hash');
+
+    await freshHasher.verifyWithoutAccount('Analytical1!');
+
+    expect(hashSpy).not.toHaveBeenCalled();
+  });
 });

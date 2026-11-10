@@ -30,7 +30,11 @@ export async function createApp(
 
   // Middleware runs in the order it is registered.
   app.use(assignRequestId);
-  app.useSecurityHeaders();
+  app.useSecurityHeaders({
+    // The only HTML served here is Swagger UI, which loads same-origin assets only. Over
+    // plain-HTTP local runs this directive would make browsers fetch them over HTTPS.
+    contentSecurityPolicy: { directives: { upgradeInsecureRequests: null } },
+  });
   // Rejects cross-site writes (Sec-Fetch-Site, then Origin), on top of the SameSite=Strict
   // refresh cookie. Origins allowed by CORS are trusted here too.
   app.enableCsrfProtection({ trustedOrigins: corsOrigins });

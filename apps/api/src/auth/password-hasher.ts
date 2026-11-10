@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
+import { Injectable, type OnModuleInit } from '@nestjs/common';
 import argon2 from 'argon2';
 
 /**
@@ -15,8 +15,16 @@ const HASH_OPTIONS = {
 } as const;
 
 @Injectable()
-export class PasswordHasher {
+export class PasswordHasher implements OnModuleInit {
   private dummyHash?: Promise<string>;
+
+  /**
+   * Prepares the throwaway hash at startup. Made on first use instead, it made
+   * the first unknown-email sign-in after a restart twice as slow as the rest.
+   */
+  async onModuleInit(): Promise<void> {
+    await this.getDummyHash();
+  }
 
   hash(password: string): Promise<string> {
     return argon2.hash(password, HASH_OPTIONS);
@@ -32,8 +40,12 @@ export class PasswordHasher {
    * password and response times don't reveal which accounts exist.
    */
   async verifyWithoutAccount(password: string): Promise<false> {
-    this.dummyHash ??= this.hash(randomBytes(32).toString('base64url'));
-    await argon2.verify(await this.dummyHash, password);
+    await argon2.verify(await this.getDummyHash(), password);
     return false;
+  }
+
+  private getDummyHash(): Promise<string> {
+    this.dummyHash ??= this.hash(randomBytes(32).toString('base64url'));
+    return this.dummyHash;
   }
 }

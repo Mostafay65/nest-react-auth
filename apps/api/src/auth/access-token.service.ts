@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -24,7 +25,11 @@ export class AccessTokenService {
   }
 
   async issue(userId: string): Promise<IssuedAccessToken> {
-    const token = await this.jwt.signAsync({ sub: userId }, { expiresIn: this.ttlSeconds });
+    // A unique jti, so two tokens issued in the same second still differ and logs can tell them apart.
+    const token = await this.jwt.signAsync(
+      { sub: userId },
+      { expiresIn: this.ttlSeconds, jwtid: randomUUID() },
+    );
     return { token, expiresIn: this.ttlSeconds };
   }
 

@@ -25,8 +25,17 @@ describe('AccessTokenService', () => {
 
     expect(jwt.decode(token, { complete: true })).toMatchObject({
       header: { alg: 'HS256' },
-      payload: { sub: USER_ID, iss: JWT_ISSUER, aud: JWT_AUDIENCE },
+      payload: { sub: USER_ID, iss: JWT_ISSUER, aud: JWT_AUDIENCE, jti: expect.any(String) },
     });
+  });
+
+  it('makes every token unique, even two issued in the same second', async () => {
+    const [first, second] = await Promise.all([
+      accessTokens.issue(USER_ID),
+      accessTokens.issue(USER_ID),
+    ]);
+
+    expect(first.token).not.toBe(second.token);
   });
 
   it('rejects an expired token', async () => {
