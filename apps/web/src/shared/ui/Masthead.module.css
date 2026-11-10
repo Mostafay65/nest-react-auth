@@ -1,0 +1,45 @@
+.masthead {
+  composes: label from '../styles/type.module.css';
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem 2rem;
+  padding: 1.25rem var(--gutter) 1.1rem;
+  /* A newspaper's double rule under the masthead. */
+  border-bottom: 3px double var(--ink);
+}
+
+.wordmark {
+  text-decoration: none;
+}
+
+.index {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.entry:hover {
+  color: var(--ink);
+}
+
+.number {
+  margin-right: 0.6em;
+}
+
+/* The current page: ink text, and the index number in the one accent colour. */
+.entry[aria-current='page'] {
+  color: var(--ink);
+}
+
+.entry[aria-current='page'] .number {
+  color: var(--accent);
+}

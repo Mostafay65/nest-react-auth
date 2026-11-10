@@ -1,0 +1,95 @@
+.page {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--gutter);
+  width: 100%;
+  max-width: var(--page-width);
+  margin-inline: auto;
+  padding: clamp(2rem, 1rem + 4vw, 4.5rem) var(--gutter) clamp(3rem, 1rem + 7vw, 7rem);
+}
+
+.dateline {
+  composes: label from '../../shared/styles/type.module.css';
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 2rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-muted);
+}
+
+.headline {
+  grid-column: 1 / span 10;
+  max-width: 13ch;
+  margin-top: clamp(2.5rem, 1rem + 5vw, 5rem);
+  font-size: var(--step-headline);
+  font-weight: 380;
+  line-height: 0.92;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.headline:focus {
+  outline: none;
+}
+
+.account {
+  grid-column: 6 / span 7;
+  margin-top: clamp(3rem, 1.5rem + 5vw, 6rem);
+}
+
+.accountHeading {
+  composes: label from '../../shared/styles/type.module.css';
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--ink);
+}
+
+.ledger {
+  margin: 0;
+}
+
+.entry {
+  display: grid;
+  grid-template-columns: minmax(8.5rem, 2fr) 5fr;
+  gap: 0.25rem var(--gutter);
+  align-items: baseline;
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.term {
+  composes: label from '../../shared/styles/type.module.css';
+  color: var(--ink-muted);
+}
+
+.value {
+  margin: 0;
+  font-size: var(--step-field);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.actions {
+  margin-top: 2.5rem;
+}
+
+.error {
+  margin-top: 1rem;
+  color: var(--accent);
+  font-size: var(--step-small);
+  font-style: italic;
+}
+
+@media (max-width: 56rem) {
+  .headline,
+  .account {
+    grid-column: 1 / -1;
+  }
+
+  .entry {
+    grid-template-columns: 1fr;
+  }
+}

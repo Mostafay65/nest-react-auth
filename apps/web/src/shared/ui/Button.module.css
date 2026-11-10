@@ -1,0 +1,57 @@
+/*
+ * Each variant composes the label style itself. Vite's Lightning CSS transform does not
+ * follow a chain (a variant composing .base composing a class from another file).
+ */
+.base {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.solid {
+  composes: base;
+  composes: label from '../styles/type.module.css';
+  justify-content: space-between;
+  gap: 2.5rem;
+  min-width: min(100%, 15rem);
+  padding: 1.05rem 1.25rem;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.text {
+  composes: base;
+  composes: label from '../styles/type.module.css';
+  gap: 0.75rem;
+  padding: 0.25rem 0;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  background: none;
+  color: var(--ink);
+}
+
+.solid:disabled,
+.text:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.arrow {
+  font-family: var(--font-serif);
+  font-size: 1.1em;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .arrow {
+    transition: transform var(--duration) var(--ease-out);
+  }
+
+  .solid:hover:not(:disabled) .arrow,
+  .text:hover:not(:disabled) .arrow {
+    transform: translateX(0.3rem);
+  }
+}

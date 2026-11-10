@@ -1,0 +1,21 @@
+.form {
+  display: block;
+}
+
+.submit {
+  margin-top: 2.75rem;
+}
+
+.toggle {
+  composes: label from '../../../shared/styles/type.module.css';
+  flex: none;
+  padding: 0.35rem 0;
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.toggle:hover {
+  color: var(--ink);
+}

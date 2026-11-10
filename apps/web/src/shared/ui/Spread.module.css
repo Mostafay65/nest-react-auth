@@ -1,0 +1,64 @@
+.spread {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--gutter);
+  width: 100%;
+  max-width: var(--page-width);
+  margin-inline: auto;
+  padding: clamp(2.5rem, 1rem + 6vw, 6.5rem) var(--gutter) clamp(3rem, 1rem + 7vw, 7rem);
+}
+
+.intro {
+  grid-column: 1 / span 5;
+}
+
+.body {
+  grid-column: 6 / span 7;
+  max-width: 36rem;
+  /* A column rule, set in from the gutter. */
+  padding-left: var(--gutter);
+  border-left: 1px solid var(--rule);
+}
+
+.index {
+  composes: label from '../styles/type.module.css';
+  color: var(--ink-muted);
+}
+
+.title {
+  margin-top: 1.25rem;
+  font-size: var(--step-title);
+  font-weight: 380;
+  line-height: 0.92;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.title:focus {
+  outline: none;
+}
+
+.lede {
+  max-width: 24ch;
+  margin-top: 1.75rem;
+  color: var(--ink-muted);
+  font-size: var(--step-lede);
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+
+@media (max-width: 56rem) {
+  .intro,
+  .body {
+    grid-column: 1 / -1;
+  }
+
+  .body {
+    max-width: none;
+    margin-top: 3rem;
+    padding-top: 2.5rem;
+    padding-left: 0;
+    border-top: 1px solid var(--rule);
+    border-left: 0;
+  }
+}

@@ -1,0 +1,52 @@
+/*
+ * Paper and ink. One accent, vermilion, reserved for what needs attention:
+ * errors, focus and the active index. Every text pair meets WCAG AA (4.5:1)
+ * and every control boundary 3:1; tokens.test.ts checks both themes.
+ */
+:root {
+  color-scheme: light;
+
+  --paper: #f3efe6;
+  --ink: #16130f;
+  --ink-muted: #5f584e;
+  /* Decorative hairlines between sections. */
+  --rule: #d8d0c0;
+  /* Input underlines are the only outline of a field, so they need 3:1. */
+  --field-rule: #8a8172;
+  --accent: #b23a14;
+  /* Text on the solid ink button. */
+  --on-ink: #f3efe6;
+
+  --font-serif:
+    'Fraunces Variable', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --step-label: 0.75rem;
+  --step-small: 0.9375rem;
+  --step-body: 1.125rem;
+  --step-field: 1.25rem;
+  --step-lede: clamp(1.125rem, 1rem + 0.45vw, 1.375rem);
+  --step-title: clamp(3rem, 1.75rem + 5.4vw, 6.5rem);
+  --step-headline: clamp(2.75rem, 1.5rem + 5vw, 6rem);
+
+  --tracking-label: 0.12em;
+  --gutter: clamp(1.25rem, 0.75rem + 2.2vw, 2.5rem);
+  --page-width: 80rem;
+
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --duration: 150ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --paper: #16130f;
+    --ink: #f3efe6;
+    --ink-muted: #b0a796;
+    --rule: #3a342b;
+    --field-rule: #8c8373;
+    --accent: #f0643a;
+    --on-ink: #16130f;
+  }
+}

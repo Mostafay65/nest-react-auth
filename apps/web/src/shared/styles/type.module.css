@@ -1,0 +1,9 @@
+/* Mono small caps: labels, indexes, buttons. Composed by the components that use them. */
+.label {
+  font-family: var(--font-mono);
+  font-size: var(--step-label);
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  line-height: 1.4;
+  text-transform: uppercase;
+}

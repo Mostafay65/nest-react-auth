@@ -1,0 +1,11 @@
+.switch {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-muted);
+  font-size: var(--step-small);
+}
+
+.switch a {
+  color: var(--ink);
+}
