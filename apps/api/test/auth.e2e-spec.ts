@@ -288,6 +288,26 @@ describe('Auth API (e2e)', () => {
       ).toBe(0);
     });
 
+    it('ends the session when the same refresh token is sent twice at once', async () => {
+      const client = apiClient(app);
+      const session = await signUp(client);
+      const exchange = () =>
+        client.post(`${AUTH}/refresh`).set('Cookie', refreshCookie(session.refreshToken));
+
+      const responses = await Promise.all([exchange(), exchange()]);
+
+      // One exchange wins and the other counts as reuse. The reuse revokes the
+      // session, including the token the winner was just given.
+      expect(responses.map((response) => response.status).sort((a, b) => a - b)).toEqual([
+        200, 401,
+      ]);
+      expect(
+        await db
+          .collection('refresh_tokens')
+          .countDocuments({ userId: toObjectId(session.userId) }),
+      ).toBe(0);
+    });
+
     it('clears the cookie when the token is not accepted', async () => {
       const response = await apiClient(app)
         .post(`${AUTH}/refresh`)

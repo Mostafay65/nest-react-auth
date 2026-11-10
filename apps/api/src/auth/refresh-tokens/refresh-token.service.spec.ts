@@ -113,6 +113,34 @@ describe('RefreshTokenService', () => {
 
       expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
     });
+
+    it('leaves no live token behind when two exchanges race, even if the loser finishes first', async () => {
+      const issued = await service.issue(USER_ID);
+      // Slow writes let the losing exchange revoke the family before the winner stores anything.
+      const create = store.create.bind(store);
+      vi.spyOn(store, 'create').mockImplementation(async (token) => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await create(token);
+      });
+
+      const results = await Promise.allSettled([
+        service.rotate(issued.token),
+        service.rotate(issued.token),
+      ]);
+
+      expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+      expect(store.all).toEqual([]);
+    });
+
+    it('stores no successor for a token that was already used', async () => {
+      const issued = await service.issue(USER_ID);
+      await service.rotate(issued.token);
+      const create = vi.spyOn(store, 'create');
+
+      await expect(service.rotate(issued.token)).rejects.toBeInstanceOf(InvalidRefreshTokenError);
+
+      expect(create).not.toHaveBeenCalled();
+    });
   });
 
   describe('revoke', () => {

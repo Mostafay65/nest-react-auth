@@ -36,14 +36,15 @@ export class RefreshTokenService {
     if (!stored || stored.expiresAt.getTime() <= Date.now()) {
       throw new InvalidRefreshTokenError();
     }
+    if (stored.usedAt) return this.rejectReuse(stored);
 
-    const claimed = !stored.usedAt && (await this.tokens.markUsed(stored.id, new Date()));
-    if (!claimed) {
-      await this.revokeFamilyAfterReuse(stored);
-      throw new InvalidRefreshTokenError();
-    }
-
-    return this.issueInFamily(stored.userId, stored.familyId);
+    // The successor is stored before the old token is claimed. When two requests
+    // race with one token, the loser revokes the family after the winner's
+    // successor exists, so the race never leaves a live session behind.
+    const successor = await this.issueInFamily(stored.userId, stored.familyId);
+    const claimed = await this.tokens.markUsed(stored.id, new Date());
+    if (!claimed) return this.rejectReuse(stored);
+    return successor;
   }
 
   /** Ends the session the token belongs to. Unknown tokens are ignored, so sign-out is idempotent. */
@@ -59,8 +60,10 @@ export class RefreshTokenService {
     return { token, userId, expiresAt };
   }
 
-  private async revokeFamilyAfterReuse({ familyId, userId }: StoredRefreshToken): Promise<void> {
+  /** A retired token came back, so it was stolen or replayed: the whole session ends. */
+  private async rejectReuse({ familyId, userId }: StoredRefreshToken): Promise<never> {
     await this.tokens.deleteFamily(familyId);
     this.logger.warn({ familyId, userId }, 'Refresh token reuse detected; session revoked');
+    throw new InvalidRefreshTokenError();
   }
 }
