@@ -1,5 +1,7 @@
 name: nest-react-auth
 
+# npm run db:up     -> MongoDB only, for local development (npm run dev).
+# npm run stack:up  -> everything, built from source: open http://localhost:8080
 services:
   mongo:
     image: mongo:8.2
@@ -13,6 +15,37 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      LOG_LEVEL: info
+      MONGODB_URI: mongodb://mongo:27017/nest-react-auth
+      # A throwaway secret for running the stack on your machine. Set a real one anywhere else.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-compose-secret-replace-outside-local-runs}
+      # The stack is served over plain HTTP on localhost. Keep the default (true) behind TLS.
+      COOKIE_SECURE: 'false'
+      # nginx in the web container is the one proxy in front of the API.
+      TRUST_PROXY: 1
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:8080:8080'
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   mongo-data:
