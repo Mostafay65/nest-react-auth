@@ -1,17 +1,34 @@
 .masthead {
   composes: label from '../styles/type.module.css';
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template: 'wordmark index theme' / 1fr auto auto;
   align-items: baseline;
-  justify-content: space-between;
   gap: 0.75rem 2rem;
   padding: 1.25rem var(--gutter) 1.1rem;
   /* A newspaper's double rule under the masthead. */
   border-bottom: 3px double var(--ink);
 }
 
+/* On a narrow screen the index moves to a line of its own, below the other two. */
+@media (max-width: 40rem) {
+  .masthead {
+    grid-template: 'wordmark theme' 'index index' / 1fr auto;
+  }
+}
+
 .wordmark {
+  grid-area: wordmark;
+  /* Only as wide as its text, not the whole column. */
+  justify-self: start;
   text-decoration: none;
+}
+
+.nav {
+  grid-area: index;
+}
+
+.theme {
+  grid-area: theme;
 }
 
 .index {
@@ -45,11 +62,12 @@
 }
 
 /*
- * On touch screens each link gets a target at least 44px tall without moving
- * anything: padding grows the target and an equal negative margin gives the
- * space back. The wordmark grows up into the masthead's top padding and the
- * index down into its bottom padding, so on a phone, where the index wraps
- * below the wordmark, the two targets meet instead of overlapping.
+ * On touch screens each link and the theme button get a target at least 44px
+ * tall without moving anything: padding grows the target and an equal negative
+ * margin gives the space back. The wordmark and the theme button grow up into
+ * the masthead's top padding and the index down into its bottom padding, so on
+ * a phone, where the index sits below the other two, the targets meet instead
+ * of overlapping.
  */
 @media (pointer: coarse) {
   .wordmark,
@@ -57,7 +75,9 @@
     display: inline-block;
   }
 
-  .wordmark {
+  /* `.masthead .theme` outranks the button's own `padding: 0`, whichever loads last. */
+  .wordmark,
+  .masthead .theme {
     padding-block: 1.25rem 0.5rem;
     margin-block: -1.25rem -0.5rem;
   }

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Link, NavLink } from 'react-router';
 import { paths } from '../paths';
 import styles from './Masthead.module.css';
+import { ThemeToggle } from './ThemeToggle';
 
 export interface IndexEntry {
   number: string;
@@ -9,7 +10,10 @@ export interface IndexEntry {
   to: string;
 }
 
-/** The strip above every page: the wordmark, then a numbered index of where you can go. */
+/**
+ * The strip above every page: the wordmark, a numbered index of where you can
+ * go, and the theme button.
+ */
 export function Masthead({ entries = [] }: { entries?: readonly IndexEntry[] }) {
   return (
     <header className={styles.masthead}>
@@ -17,7 +21,7 @@ export function Masthead({ entries = [] }: { entries?: readonly IndexEntry[] }) 
         Auth <span aria-hidden="true">/</span> Module
       </Link>
       {entries.length > 0 && (
-        <nav aria-label="Main">
+        <nav aria-label="Main" className={styles.nav}>
           <ol className={styles.index}>
             {entries.map((entry) => (
               <li key={entry.to}>
@@ -30,6 +34,7 @@ export function Masthead({ entries = [] }: { entries?: readonly IndexEntry[] }) 
           </ol>
         </nav>
       )}
+      <ThemeToggle className={styles.theme} />
     </header>
   );
 }

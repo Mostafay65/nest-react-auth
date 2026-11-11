@@ -37,8 +37,13 @@
   --duration: 150ms;
 }
 
+/*
+ * The dark theme, in two blocks with the same values: one for a device set to
+ * dark, unless the user picked light, and one for a user who picked dark (the
+ * theme button sets `data-theme` on <html>). tokens.test.ts checks they match.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     color-scheme: dark;
 
     --paper: #16130f;
@@ -49,4 +54,16 @@
     --accent: #f0643a;
     --on-ink: #16130f;
   }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --paper: #16130f;
+  --ink: #f3efe6;
+  --ink-muted: #b0a796;
+  --rule: #3a342b;
+  --field-rule: #8c8373;
+  --accent: #f0643a;
+  --on-ink: #16130f;
 }

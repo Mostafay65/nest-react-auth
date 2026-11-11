@@ -44,16 +44,6 @@ Local time, from the commit history and the session log (10–11 November 2026).
 | 05:33       | Final review: a fourth fresh-context agent reads the whole uncommitted change                         |
 | 09:02       | Review fixes committed, after the recorded run was repeated on the final image and every check passed |
 
-## The brief
-
-My instructions, given in Egyptian Arabic and rendered here in English. The meaning is unchanged, and nothing is added.
-
-1. "Implement the task in the PDF and make it impressive. I want clean, well-organised code with a service layer and a repository layer. Build the backend first. When it's done, run an end-to-end test, document the results, and make sure everything works. Don't make a single mistake: the code should be organised and easy to read, good enough that another AI agent reviewing it would call it excellent and pick it over the other candidates' code. Use subagents freely. The frontend must not look like typical AI-generated UI."
-2. "Use the Mostafay65 GitHub account, and implement every bonus item: logging, error handling, testing, basic CI/CD and API documentation."
-3. "Write AI.md in professional English, from what really happened in this session."
-4. "The GitHub sign-in must apply to this project only." (I signed in myself; the AI never handled credentials.)
-5. "When the frontend is running, tell me the port and give me the local link."
-
 ### Decisions I made
 
 | Decision                | Options the AI laid out                                   | My call                                                                                    |

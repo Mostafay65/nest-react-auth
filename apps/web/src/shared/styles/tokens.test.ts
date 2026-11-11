@@ -6,18 +6,30 @@ const tokensCss = readFileSync(join(import.meta.dirname, 'tokens.css'), 'utf8');
 
 type Palette = Record<string, string>;
 
-/** Reads the `--name: #rrggbb` colour tokens of the light theme and of the dark override. */
-function readPalettes(css: string): { light: Palette; dark: Palette } {
-  const darkStart = css.indexOf('@media (prefers-color-scheme: dark)');
-  const colours = (block: string): Palette =>
-    Object.fromEntries(
-      [...block.matchAll(/--([\w-]+):\s*(#[0-9a-f]{6})\b/gi)].map(([, name = '', hex = '']) => [
-        name,
-        hex,
-      ]),
-    );
-  const light = colours(css.slice(0, darkStart));
-  return { light, dark: { ...light, ...colours(css.slice(darkStart)) } };
+/** Reads the `--name: #rrggbb` colour tokens in a piece of CSS. */
+const colours = (block: string): Palette =>
+  Object.fromEntries(
+    [...block.matchAll(/--([\w-]+):\s*(#[0-9a-f]{6})\b/gi)].map(([, name = '', hex = '']) => [
+      name,
+      hex,
+    ]),
+  );
+
+/**
+ * Splits tokens.css into its three blocks: the light theme, the dark theme for
+ * a device set to dark, and the same dark theme for a user who picked it.
+ */
+function readBlocks(css: string): { light: Palette; deviceDark: Palette; pickedDark: Palette } {
+  const deviceStart = css.indexOf('@media (prefers-color-scheme: dark)');
+  const pickedStart = css.indexOf(":root[data-theme='dark']");
+  if (deviceStart < 0 || pickedStart < deviceStart) {
+    throw new Error('tokens.css no longer has the light, device-dark and picked-dark blocks');
+  }
+  return {
+    light: colours(css.slice(0, deviceStart)),
+    deviceDark: colours(css.slice(deviceStart, pickedStart)),
+    pickedDark: colours(css.slice(pickedStart)),
+  };
 }
 
 /** WCAG 2.2 relative luminance and contrast ratio. */
@@ -43,7 +55,12 @@ const PAIRS = [
   { text: 'field-rule', on: 'paper', minimum: 3, use: 'input underlines (a control boundary)' },
 ] as const;
 
-const palettes = readPalettes(tokensCss);
+const blocks = readBlocks(tokensCss);
+const palettes = { light: blocks.light, dark: { ...blocks.light, ...blocks.deviceDark } };
+
+it('gives the same dark theme whether the device or the user picks it', () => {
+  expect(blocks.pickedDark).toEqual(blocks.deviceDark);
+});
 
 describe.each(Object.entries(palettes))('the %s theme', (_theme, palette) => {
   it.each(PAIRS)('gives $use at least $minimum:1 contrast', ({ text, on, minimum }) => {

@@ -1,0 +1,14 @@
+/* Set like the masthead's index entries: muted ink, full ink on hover. */
+.toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.toggle:hover {
+  color: var(--ink);
+}
