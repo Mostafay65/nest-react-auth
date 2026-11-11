@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { apiClient, AUTH, databaseOf, newUser, startTestApp } from './support/e2e.js';
+import { apiClient, AUTH, databaseOf, newUser, signUp, startTestApp } from './support/e2e.js';
 
 describe('HTTP platform (e2e)', () => {
   let app: NestExpressApplication;
@@ -42,6 +42,26 @@ describe('HTTP platform (e2e)', () => {
         'referrer-policy': 'no-referrer',
       });
       expect(response.headers).not.toHaveProperty('x-powered-by');
+    });
+
+    it('lets no browser or proxy keep a copy of a response', async () => {
+      const client = apiClient(app);
+      const { accessToken } = await signUp(client);
+      const profile = await client
+        .get('/api/v1/users/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+      // Rejected before routing, so this covers every response, not just the routes.
+      const malformed = await client
+        .post(`${AUTH}/sign-in`)
+        .set('Content-Type', 'application/json')
+        .send('{')
+        .expect(400);
+
+      for (const response of [profile, malformed]) {
+        expect(response.get('Cache-Control')).toBe('no-store');
+        expect(response.get('ETag')).toBeUndefined();
+      }
     });
   });
 

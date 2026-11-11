@@ -5,6 +5,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module.js';
 import { API_PREFIX, API_VERSION } from './common/http/api.constants.js';
+import { preventCaching } from './common/http/no-store.middleware.js';
 import { assignRequestId, REQUEST_ID_HEADER } from './common/http/request-id.middleware.js';
 import { setupSwagger } from './common/swagger/swagger.js';
 import type { Env } from './config/env.js';
@@ -27,9 +28,12 @@ export async function createApp(
 
   app.useLogger(app.get(Logger));
   app.set('trust proxy', config.get('TRUST_PROXY', { infer: true }));
+  // Responses are never cached (see preventCaching), so validators would go unused.
+  app.set('etag', false);
 
   // Middleware runs in the order it is registered.
   app.use(assignRequestId);
+  app.use(preventCaching);
   app.useSecurityHeaders({
     // The only HTML served here is Swagger UI, which loads same-origin assets only. Over
     // plain-HTTP local runs this directive would make browsers fetch them over HTTPS.
