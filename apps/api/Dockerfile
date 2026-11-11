@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Built from the repository root: docker build -f apps/api/Dockerfile .
 
-FROM node:24-alpine AS base
+FROM node:26-alpine AS base
 WORKDIR /app
 # Git hooks are a development tool; skip them inside images.
 ENV HUSKY=0
@@ -29,7 +29,7 @@ FROM manifests AS runtime-deps
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --workspace @nest-react-auth/api --omit=dev --omit=optional --ignore-scripts
 
-FROM node:24-alpine AS runtime
+FROM node:26-alpine AS runtime
 # Only node is needed at runtime: drop the package managers (and the CVEs they
 # bundle), and take Alpine security fixes released after the base image.
 RUN apk upgrade --no-cache \
