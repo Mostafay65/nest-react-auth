@@ -21,6 +21,9 @@ RUN npm run build --workspace @nest-react-auth/contracts \
 # nginx and its core libraries only; the full one adds curl, njs, and image and XSLT
 # modules that serving static files never uses. The upgrade picks up Alpine's fixes.
 FROM nginxinc/nginx-unprivileged:1.30-alpine-slim AS runtime
+# Links the package on GitHub Container Registry to this repository.
+LABEL org.opencontainers.image.source="https://github.com/Mostafay65/nest-react-auth" \
+      org.opencontainers.image.description="nest-react-auth web app, served by nginx"
 USER root
 RUN apk upgrade --no-cache
 USER nginx

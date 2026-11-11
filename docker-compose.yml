@@ -2,6 +2,9 @@ name: nest-react-auth
 
 # npm run db:up     -> MongoDB only, for local development (npm run dev).
 # npm run stack:up  -> everything, built from source: open http://localhost:8080
+#
+# The API and web containers run read-only, without Linux capabilities, and can't
+# gain privileges; each gets a small writable /tmp.
 services:
   mongo:
     image: mongo:8.2
@@ -10,6 +13,9 @@ services:
       - '127.0.0.1:27017:27017'
     volumes:
       - mongo-data:/data/db
+    # The entrypoint starts as root to own /data/db, then drops to the mongodb user.
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
       interval: 5s
@@ -21,17 +27,27 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       NODE_ENV: production
       PORT: 3000
       LOG_LEVEL: info
       MONGODB_URI: mongodb://mongo:27017/nest-react-auth
-      # A throwaway secret for running the stack on your machine. Set a real one anywhere else.
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-compose-secret-replace-outside-local-runs}
+      # Required, and never committed: `npm run stack:up` writes a random one to .env
+      # (git-ignored) on its first run. The API refuses to start without it.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-}
       # The stack is served over plain HTTP on localhost. Keep the default (true) behind TLS.
       COOKIE_SECURE: 'false'
       # nginx in the web container is the one proxy in front of the API.
       TRUST_PROXY: 1
+      # Off by default in production; on here so the docs are at http://localhost:8080/api/docs.
+      SWAGGER_ENABLED: 'true'
     depends_on:
       mongo:
         condition: service_healthy
@@ -41,6 +57,14 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
+    read_only: true
+    # nginx keeps its PID file and request buffers here.
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     ports:
       - '127.0.0.1:8080:8080'
     depends_on:

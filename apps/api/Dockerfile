@@ -30,6 +30,9 @@ RUN --mount=type=cache,target=/root/.npm \
     npm ci --workspace @nest-react-auth/api --omit=dev --omit=optional --ignore-scripts
 
 FROM node:24-alpine AS runtime
+# Links the package on GitHub Container Registry to this repository.
+LABEL org.opencontainers.image.source="https://github.com/Mostafay65/nest-react-auth" \
+      org.opencontainers.image.description="nest-react-auth API (NestJS + MongoDB)"
 # Only node is needed at runtime: drop the package managers (and the CVEs they
 # bundle), and take Alpine security fixes released after the base image.
 RUN apk upgrade --no-cache \
@@ -46,6 +49,7 @@ COPY --from=build /app/apps/api/dist ./apps/api/dist
 WORKDIR /app/apps/api
 USER node
 EXPOSE 3000
+# Follows PORT, so running the API on another port doesn't mark it unhealthy.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=5 \
-  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+  CMD ["node", "-e", "fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/health`).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
 CMD ["node", "dist/main.js"]
