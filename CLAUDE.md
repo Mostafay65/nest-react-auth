@@ -38,13 +38,13 @@ Node 24 (`.nvmrc`). From the repo root:
 
 ## Web rules
 
-- The session lives in memory (`features/auth/session-store.ts`). Tokens never go to `localStorage` or `sessionStorage`.
+- The session lives in memory (`features/auth/session-store.ts`). Tokens never go to `localStorage` or `sessionStorage`. The only thing stored there is the theme pick (`shared/theme.ts`), which `public/theme.js` applies before the first paint; the two share the key and values.
 - Call the API through `shared/http/request.ts`, or `authorizedJson` for protected routes (it refreshes once on a 401). Check every response with a contract schema.
 - Refresh only through `refreshSession()`. It runs one refresh at a time and takes a Web Lock across tabs. A second, parallel refresh would trip reuse detection and end the session.
 - Guards are route middleware (`features/auth/guards.ts`, `app/routes.tsx`), not effects.
 - Handle server errors by `code` (`features/auth/form-errors.ts`), never by message text.
 - Style with CSS Modules and the variables in `shared/styles/tokens.css`:
-  - Add colours only in `tokens.css`, for both themes, and keep `tokens.test.ts` (WCAG AA) passing.
+  - Add colours only in `tokens.css`, for both themes, and keep `tokens.test.ts` (WCAG AA) passing. The dark values are written twice, for a dark device and for a picked dark theme, and the test checks the two match.
   - No UI kits, no `<style>` tags, no CDN assets: nginx sends `script-src 'self'`, `style-src 'self'` and `font-src 'self'`.
 - Accessibility:
   - Fields go through `TextField`, which gives each one a real label, plus `aria-invalid` and `aria-describedby` on errors.
