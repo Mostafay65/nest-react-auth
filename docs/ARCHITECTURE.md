@@ -71,17 +71,18 @@ flowchart TB
 What happens to a request, in order ([`app.setup.ts`](../apps/api/src/app.setup.ts), [`app.module.ts`](../apps/api/src/app.module.ts)):
 
 1. **Request ID.** A caller's `X-Request-Id` is kept if it is short and log-safe. Otherwise a UUID is generated. The ID is echoed in the response header and the error body, and appears on every log line.
-2. **Security headers.** CSP, HSTS, `X-Content-Type-Options` and the rest, via Nest's built-in `useSecurityHeaders()`.
-3. **Cross-site write check.** Nest's `enableCsrfProtection()` rejects a state-changing request whose `Sec-Fetch-Site` says another site sent it. When the browser doesn't send `Sec-Fetch-Site`, it compares `Origin` with `Host`.
-4. **CORS**, when origins are configured.
-5. **JSON body** of at most 10 kB. Nothing else is parsed.
-6. **Request log** (pino-http).
-7. **Guards**, in this order:
+2. **No caching.** Every response gets `Cache-Control: no-store`, and ETags are off. Responses hold tokens and personal data, so no browser or proxy keeps a copy, not even after sign-out.
+3. **Security headers.** CSP, HSTS, `X-Content-Type-Options` and the rest, via Nest's built-in `useSecurityHeaders()`.
+4. **Cross-site write check.** Nest's `enableCsrfProtection()` rejects a state-changing request whose `Sec-Fetch-Site` says another site sent it. When the browser doesn't send `Sec-Fetch-Site`, it compares `Origin` with `Host`.
+5. **CORS**, when origins are configured.
+6. **JSON body** of at most 10 kB. Nothing else is parsed.
+7. **Request log** (pino-http).
+8. **Guards**, in this order:
    - the rate limit (per client IP);
    - the access token. Every route needs a valid token unless it is marked `@Public()`, so a new route is protected by default.
-8. **Validation.** `@Body({ schema })` validates against a contract schema, which also trims and lower-cases where needed. Unknown fields are rejected, not dropped.
-9. **Controller → service → repository.**
-10. **Errors.** Every exception, from any step, goes through [`ProblemDetailsFilter`](../apps/api/src/common/errors/problem-details.filter.ts).
+9. **Validation.** `@Body({ schema })` validates against a contract schema, which also trims and lower-cases where needed. Unknown fields are rejected, not dropped.
+10. **Controller → service → repository.**
+11. **Errors.** Every exception, from any step, goes through [`ProblemDetailsFilter`](../apps/api/src/common/errors/problem-details.filter.ts).
 
 ## Sessions and tokens
 
@@ -213,21 +214,22 @@ Every error is an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `applicatio
 
 ## Security
 
-| Threat                                  | Defence                                                                                                                    | Where                                                                                                                                                           |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stolen password database                | argon2id at OWASP's minimum cost; refresh tokens stored as SHA-256 hashes                                                  | [`password-hasher.ts`](../apps/api/src/auth/password-hasher.ts), [`refresh-token.crypto.ts`](../apps/api/src/auth/refresh-tokens/refresh-token.crypto.ts)       |
-| Account enumeration through sign-in     | one answer for a wrong password and an unknown email, and an argon2 verification on both paths                             | [`auth.service.ts`](../apps/api/src/auth/auth.service.ts)                                                                                                       |
-| Password guessing                       | sign-in and sign-up each allow 10 requests per minute per client IP (other routes: 100)                                    | [`api.constants.ts`](../apps/api/src/common/http/api.constants.ts)                                                                                              |
-| Forged or tampered access tokens        | HS256 only; issuer, audience and expiry checked; `alg: none` refused                                                       | [`jwt.options.ts`](../apps/api/src/auth/jwt.options.ts)                                                                                                         |
-| Stolen refresh token                    | rotation with reuse detection; `httpOnly`; narrow cookie path                                                              | [`refresh-token.service.ts`](../apps/api/src/auth/refresh-tokens/refresh-token.service.ts)                                                                      |
-| CSRF                                    | `SameSite=Strict`, plus the `Sec-Fetch-Site`/`Origin` check on every write                                                 | [`app.setup.ts`](../apps/api/src/app.setup.ts)                                                                                                                  |
-| NoSQL injection                         | schemas accept strings only; Mongoose `sanitizeFilter` on every query                                                      | [`auth.ts`](../packages/contracts/src/auth.ts), [`database.module.ts`](../apps/api/src/database/database.module.ts)                                             |
-| Mass assignment                         | unknown fields are rejected (`z.strictObject`)                                                                             | [`auth.ts`](../packages/contracts/src/auth.ts)                                                                                                                  |
-| Oversized or malformed bodies           | JSON only, 10 kB limit, clean 400/413 answers                                                                              | [`app.setup.ts`](../apps/api/src/app.setup.ts)                                                                                                                  |
-| Token theft through XSS                 | the access token lives in memory only, the refresh token is `httpOnly`, and nginx sends a strict CSP (`script-src 'self'`) | [`session-store.ts`](../apps/web/src/features/auth/session-store.ts), [`security-headers.conf`](../apps/web/nginx/security-headers.conf)                        |
-| Leaking internals                       | generic 500s; headers (and so tokens and cookies) never logged                                                             | [`problem-details.filter.ts`](../apps/api/src/common/errors/problem-details.filter.ts), [`logger.options.ts`](../apps/api/src/common/logging/logger.options.ts) |
-| Bad configuration reaching production   | every variable validated at startup; the process refuses to start otherwise                                                | [`env.ts`](../apps/api/src/config/env.ts)                                                                                                                       |
-| Vulnerable or overprivileged containers | non-root users; no package managers in the API image; 0 HIGH/CRITICAL findings (Trivy)                                     | [`apps/api/Dockerfile`](../apps/api/Dockerfile), [`apps/web/Dockerfile`](../apps/web/Dockerfile)                                                                |
+| Threat                                    | Defence                                                                                                                    | Where                                                                                                                                                           |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stolen password database                  | argon2id at OWASP's minimum cost; refresh tokens stored as SHA-256 hashes                                                  | [`password-hasher.ts`](../apps/api/src/auth/password-hasher.ts), [`refresh-token.crypto.ts`](../apps/api/src/auth/refresh-tokens/refresh-token.crypto.ts)       |
+| Account enumeration through sign-in       | one answer for a wrong password and an unknown email, and an argon2 verification on both paths                             | [`auth.service.ts`](../apps/api/src/auth/auth.service.ts)                                                                                                       |
+| Password guessing                         | sign-in and sign-up each allow 10 requests per minute per client IP (other routes: 100)                                    | [`api.constants.ts`](../apps/api/src/common/http/api.constants.ts)                                                                                              |
+| Forged or tampered access tokens          | HS256 only; issuer, audience and expiry checked; `alg: none` refused                                                       | [`jwt.options.ts`](../apps/api/src/auth/jwt.options.ts)                                                                                                         |
+| Stolen refresh token                      | rotation with reuse detection; `httpOnly`; narrow cookie path                                                              | [`refresh-token.service.ts`](../apps/api/src/auth/refresh-tokens/refresh-token.service.ts)                                                                      |
+| CSRF                                      | `SameSite=Strict`, plus the `Sec-Fetch-Site`/`Origin` check on every write                                                 | [`app.setup.ts`](../apps/api/src/app.setup.ts)                                                                                                                  |
+| NoSQL injection                           | schemas accept strings only; Mongoose `sanitizeFilter` on every query                                                      | [`auth.ts`](../packages/contracts/src/auth.ts), [`database.module.ts`](../apps/api/src/database/database.module.ts)                                             |
+| Mass assignment                           | unknown fields are rejected (`z.strictObject`)                                                                             | [`auth.ts`](../packages/contracts/src/auth.ts)                                                                                                                  |
+| Oversized or malformed bodies             | JSON only, 10 kB limit, clean 400/413 answers                                                                              | [`app.setup.ts`](../apps/api/src/app.setup.ts)                                                                                                                  |
+| Token theft through XSS                   | the access token lives in memory only, the refresh token is `httpOnly`, and nginx sends a strict CSP (`script-src 'self'`) | [`session-store.ts`](../apps/web/src/features/auth/session-store.ts), [`security-headers.conf`](../apps/web/nginx/security-headers.conf)                        |
+| Responses left in browser or proxy caches | `Cache-Control: no-store` on every API response, and no ETags                                                              | [`no-store.middleware.ts`](../apps/api/src/common/http/no-store.middleware.ts)                                                                                  |
+| Leaking internals                         | generic 500s; headers (and so tokens and cookies) never logged                                                             | [`problem-details.filter.ts`](../apps/api/src/common/errors/problem-details.filter.ts), [`logger.options.ts`](../apps/api/src/common/logging/logger.options.ts) |
+| Bad configuration reaching production     | every variable validated at startup; the process refuses to start otherwise                                                | [`env.ts`](../apps/api/src/config/env.ts)                                                                                                                       |
+| Vulnerable or overprivileged containers   | non-root users; no package managers in the API image; 0 HIGH/CRITICAL findings (Trivy)                                     | [`apps/api/Dockerfile`](../apps/api/Dockerfile), [`apps/web/Dockerfile`](../apps/web/Dockerfile)                                                                |
 
 ## Logging
 
@@ -269,16 +271,18 @@ src/shared     HTTP client, design tokens, UI components
 - **Server errors land where the user looks** ([`form-errors.ts`](../apps/web/src/features/auth/form-errors.ts)). `EMAIL_ALREADY_REGISTERED` and `VALIDATION_FAILED` go on their fields. Everything else becomes one message above the button. Focus moves to the first problem.
 - **Sign-out asks the server first.** If that call fails, the user stays signed in and is told so. Clearing only the browser's memory would leave a cookie that signs them back in on the next reload.
 - **Design:** paper and ink, with one vermilion accent kept for errors, focus and the current page. Colours are CSS variables for light and dark ([`tokens.css`](../apps/web/src/shared/styles/tokens.css)), and a unit test checks every text and control pair against WCAG AA. The fonts (Fraunces and IBM Plex Mono) are bundled, not loaded from a CDN, so the strict CSP holds.
+- **Zod runs without eval** ([`zod-config.ts`](../apps/web/src/app/zod-config.ts)). Zod checks whether it may compile parsers with `new Function`, and under the CSP that check alone logs a violation. Jitless mode skips it. A browser test fails on any CSP violation.
 
 ## Testing
 
-| Level          | What it proves                                                                      | Tools                                    |
-| -------------- | ----------------------------------------------------------------------------------- | ---------------------------------------- |
-| Contracts      | every validation rule, including emoji in passwords and MongoDB operators as values | Vitest                                   |
-| API unit       | every branch of every service, the guard, the error filter, config, middleware      | Vitest, in-memory repository fakes       |
-| API end-to-end | the real app, built by the same `createApp()` as production, against a real MongoDB | Vitest, supertest, mongodb-memory-server |
-| Live run       | the production Docker image against MongoDB 8.2, recorded call by call              | [E2E test report](E2E_TEST_REPORT.md)    |
-| Web unit       | the session, refresh and retry logic, both forms, the route guards, colour contrast | Vitest, Testing Library, MSW             |
+| Level          | What it proves                                                                                                         | Tools                                    |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Contracts      | every validation rule, including emoji in passwords and MongoDB operators as values                                    | Vitest                                   |
+| API unit       | every branch of every service, the guard, the error filter, config, middleware                                         | Vitest, in-memory repository fakes       |
+| API end-to-end | the real app, built by the same `createApp()` as production, against a real MongoDB                                    | Vitest, supertest, mongodb-memory-server |
+| Live run       | the production Docker image against MongoDB 8.2, recorded call by call                                                 | [E2E test report](E2E_TEST_REPORT.md)    |
+| Web unit       | the session, refresh and retry logic, both forms, the route guards, colour contrast                                    | Vitest, Testing Library, MSW             |
+| Browser        | the journey through nginx, route guards, form errors, accessibility (axe, WCAG 2.2 AA, both themes), no CSP violations | Playwright, axe-core                     |
 
 ## Trade-offs and next steps
 
