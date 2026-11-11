@@ -73,6 +73,58 @@ describe('signUpSchema', () => {
     ]);
   });
 
+  it('counts an emoji as one character, as the API stores it', () => {
+    expect(signUpSchema.safeParse({ ...validSignUp, name: '😀'.repeat(50) }).success).toBe(true);
+    const result = signUpSchema.safeParse({ ...validSignUp, name: '😀'.repeat(51) });
+    expect(messagesFor(result)).toEqual([
+      { field: 'name', message: 'Name must be at most 50 characters long' },
+    ]);
+  });
+
+  it.each([
+    ['zero-width spaces', '\u200B\u200B\u200B'],
+    ['Hangul fillers', '\u3164\u3164\u3164'],
+    ['two letters padded with a zero-width joiner', 'A\u200DB'],
+    ['spaces between zero-width spaces', '\u200B   \u200B'],
+  ])('does not count invisible characters towards the minimum: %s', (_case, name) => {
+    const result = signUpSchema.safeParse({ ...validSignUp, name });
+    expect(messagesFor(result)).toEqual([
+      { field: 'name', message: 'Name must be at least 3 characters long' },
+    ]);
+  });
+
+  it.each([
+    ['a line break', 'Ada\nLovelace'],
+    ['a NUL character', 'Ada\u0000Lovelace'],
+    ['a right-to-left override', 'Ada \u202ELovelace'],
+  ])('rejects a name with %s', (_case, name) => {
+    const result = signUpSchema.safeParse({ ...validSignUp, name });
+    expect(messagesFor(result)).toEqual([
+      { field: 'name', message: 'Name must not contain line breaks or control characters' },
+    ]);
+  });
+
+  it('counts the space between two initials, as the user sees it', () => {
+    expect(signUpSchema.safeParse({ ...validSignUp, name: 'A B' }).success).toBe(true);
+  });
+
+  it('accepts names in any script, joiners included', () => {
+    for (const name of ['李小龍', 'Zoë Ångström', 'علی\u200Cرضا']) {
+      expect(signUpSchema.safeParse({ ...validSignUp, name }).success, name).toBe(true);
+    }
+  });
+
+  it('stores accented names in one form (NFC), however they were typed', () => {
+    const decomposed = 'Zoë Lovelace';
+    expect(signUpSchema.parse({ ...validSignUp, name: decomposed }).name).toBe('Zoë Lovelace');
+  });
+
+  it('normalises the password (NFKC), so composed and decomposed accents match', () => {
+    const composed = signUpSchema.parse({ ...validSignUp, password: 'Café-1234!' });
+    const decomposed = signUpSchema.parse({ ...validSignUp, password: 'Café-1234!' });
+    expect(decomposed.password).toBe(composed.password);
+  });
+
   it('reports missing fields with a readable message', () => {
     const result = signUpSchema.safeParse({});
     expect(messagesFor(result)).toEqual([
@@ -117,5 +169,12 @@ describe('signInSchema', () => {
   it('requires a non-empty password', () => {
     const result = signInSchema.safeParse({ email: 'ada@example.com', password: '' });
     expect(messagesFor(result)).toEqual([{ field: 'password', message: 'Password is required' }]);
+  });
+
+  it('normalises the password the same way as sign-up', () => {
+    const signIn = signInSchema.parse({ email: 'ada@example.com', password: 'Café-1234!' });
+    expect(signIn.password).toBe(
+      signUpSchema.parse({ ...validSignUp, password: 'Café-1234!' }).password,
+    );
   });
 });

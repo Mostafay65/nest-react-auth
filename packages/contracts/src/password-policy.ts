@@ -7,6 +7,14 @@
 export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 128;
 
+/**
+ * Passwords are normalised to NFKC before the rules run, as NIST SP 800-63B
+ * asks, so a composed "é" and an "e" plus an accent are the same password.
+ * The rules must judge the normalised string, or the checklist and the API
+ * would disagree about the same input.
+ */
+export const normalizePassword = (password: string): string => password.normalize('NFKC');
+
 const LETTER = /\p{L}/u;
 const DIGIT = /\p{Nd}/u;
 const SPECIAL = /[\p{P}\p{S}]/u;
