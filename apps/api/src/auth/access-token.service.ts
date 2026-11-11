@@ -35,13 +35,15 @@ export class AccessTokenService {
 
   /** @throws UnauthorizedError when the token is malformed, tampered with or expired. */
   async verify(token: string): Promise<AuthenticatedUser> {
-    let payload: { sub?: unknown };
+    let payload: { sub?: unknown; exp?: unknown };
     try {
       payload = await this.jwt.verifyAsync(token);
     } catch {
       throw new UnauthorizedError('The access token is invalid or has expired.');
     }
-    if (typeof payload.sub !== 'string') {
+    // The JWT library accepts a token without `exp` and lets it live forever. Every
+    // token issued here has one, so a token without it is refused.
+    if (typeof payload.sub !== 'string' || typeof payload.exp !== 'number') {
       throw new UnauthorizedError('The access token is invalid or has expired.');
     }
     return { id: payload.sub };

@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import type { HttpAdapterHost } from '@nestjs/core';
 import { ThrottlerException } from '@nestjs/throttler';
-import { InvalidCredentialsError } from '../../auth/auth.errors.js';
+import { InvalidCredentialsError, InvalidRefreshTokenError } from '../../auth/auth.errors.js';
 import { EmailAlreadyRegisteredError } from '../../users/users.errors.js';
 import { RequestValidationError, UnauthorizedError } from './app-error.js';
 import { ProblemDetailsFilter, toProblem } from './problem-details.filter.js';
@@ -60,6 +60,11 @@ describe('toProblem', () => {
       status: 413,
       code: 'PAYLOAD_TOO_LARGE',
       detail: 'The request body is too large.',
+    });
+    expect(toProblem(new HttpException('unsupported charset "LATIN1"', 415))).toEqual({
+      status: 415,
+      code: 'UNSUPPORTED_MEDIA_TYPE',
+      detail: 'The request body must be JSON encoded as UTF-8.',
     });
   });
 
@@ -140,10 +145,24 @@ describe('ProblemDetailsFilter', () => {
     );
   });
 
-  it('asks for a bearer token when authentication is missing', () => {
-    filter.catch(new UnauthorizedError(), hostFor(loggedRequest));
+  it.each([
+    ['a missing access token', new UnauthorizedError()],
+    ['a wrong password', new InvalidCredentialsError()],
+    ['a dead refresh token', new InvalidRefreshTokenError()],
+  ])('names the Bearer scheme on every 401: %s', (_case, error) => {
+    filter.catch(error, hostFor(loggedRequest));
 
     expect(adapter.setHeader).toHaveBeenCalledWith(response, 'WWW-Authenticate', 'Bearer');
+  });
+
+  it('sends no authentication challenge with other errors', () => {
+    filter.catch(new EmailAlreadyRegisteredError(), hostFor(loggedRequest));
+
+    expect(adapter.setHeader).not.toHaveBeenCalledWith(
+      response,
+      'WWW-Authenticate',
+      expect.anything(),
+    );
   });
 
   it('logs unexpected errors with their stack', () => {
@@ -160,7 +179,12 @@ describe('ProblemDetailsFilter', () => {
 
   it('logs a request rejected before the request logger saw it', () => {
     const logWarn = vi.spyOn(Logger.prototype, 'warn');
-    const rejectedEarly = { id: 'req-2', method: 'POST', url: '/api/v1/auth/sign-in' };
+    const rejectedEarly = {
+      id: 'req-2',
+      method: 'POST',
+      url: '/api/v1/auth/sign-in',
+      ip: '203.0.113.7',
+    };
 
     filter.catch(new HttpException('request entity too large', 413), hostFor(rejectedEarly));
 
@@ -169,6 +193,7 @@ describe('ProblemDetailsFilter', () => {
         requestId: 'req-2',
         method: 'POST',
         url: '/api/v1/auth/sign-in',
+        ip: '203.0.113.7',
         status: 413,
         code: 'PAYLOAD_TOO_LARGE',
       },

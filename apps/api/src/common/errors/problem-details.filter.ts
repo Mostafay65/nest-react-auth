@@ -26,6 +26,7 @@ const STATUS_BY_CODE: Record<ErrorCode, HttpStatus> = {
   FORBIDDEN: HttpStatus.FORBIDDEN,
   NOT_FOUND: HttpStatus.NOT_FOUND,
   PAYLOAD_TOO_LARGE: HttpStatus.PAYLOAD_TOO_LARGE,
+  UNSUPPORTED_MEDIA_TYPE: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
   RATE_LIMITED: HttpStatus.TOO_MANY_REQUESTS,
   SERVICE_UNAVAILABLE: HttpStatus.SERVICE_UNAVAILABLE,
   INTERNAL_ERROR: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -37,12 +38,15 @@ const CODE_BY_STATUS: Partial<Record<number, ErrorCode>> = {
   [HttpStatus.FORBIDDEN]: ERROR_CODES.FORBIDDEN,
   [HttpStatus.NOT_FOUND]: ERROR_CODES.NOT_FOUND,
   [HttpStatus.PAYLOAD_TOO_LARGE]: ERROR_CODES.PAYLOAD_TOO_LARGE,
+  // The JSON parser's answer to a charset other than UTF-8, or an unknown Content-Encoding.
+  [HttpStatus.UNSUPPORTED_MEDIA_TYPE]: ERROR_CODES.UNSUPPORTED_MEDIA_TYPE,
   [HttpStatus.TOO_MANY_REQUESTS]: ERROR_CODES.RATE_LIMITED,
 };
 
 const FRIENDLY_DETAIL: Partial<Record<ErrorCode, string>> = {
   RATE_LIMITED: 'Too many requests. Please wait a minute and try again.',
   PAYLOAD_TOO_LARGE: 'The request body is too large.',
+  UNSUPPORTED_MEDIA_TYPE: 'The request body must be JSON encoded as UTF-8.',
 };
 
 const INVALID_JSON_DETAIL = 'The request body is not valid JSON.';
@@ -56,10 +60,11 @@ interface Problem {
   errors?: FieldError[];
 }
 
-/** pino-http sets `log` on every request it sees. */
+/** pino-http sets `log` on every request it sees. Express' `ip` honours TRUST_PROXY. */
 interface IncomingRequest {
   id?: unknown;
   log?: unknown;
+  ip?: string;
 }
 
 /**
@@ -90,7 +95,14 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       // cross-site write), so this is the only record of the request.
       const method = httpAdapter.getRequestMethod(request);
       this.logger.warn(
-        { requestId, method, url: instance, status: problem.status, code: problem.code },
+        {
+          requestId,
+          method,
+          url: instance,
+          ip: request.ip,
+          status: problem.status,
+          code: problem.code,
+        },
         'Request rejected before routing',
       );
     }
@@ -107,7 +119,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     };
 
     httpAdapter.setHeader(response, 'Content-Type', 'application/problem+json');
-    if (problem.code === ERROR_CODES.UNAUTHORIZED) {
+    // RFC 9110 asks every 401 to name the scheme that would work. Bearer never makes a
+    // browser show its own sign-in dialog, as Basic would.
+    if (problem.status === HttpStatus.UNAUTHORIZED) {
       httpAdapter.setHeader(response, 'WWW-Authenticate', 'Bearer');
     }
     httpAdapter.reply(response, body, problem.status);

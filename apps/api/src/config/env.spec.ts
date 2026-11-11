@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { validateEnv } from './env.js';
 
 const required = {
@@ -38,6 +39,48 @@ describe('validateEnv', () => {
 
   it('refuses to start without the required settings, naming each one', () => {
     expect(() => validateEnv({})).toThrow(/MONGODB_URI[\s\S]*JWT_ACCESS_SECRET/);
+  });
+
+  it('explains how to make a secret when it is missing or empty', () => {
+    expect(() => validateEnv({ ...required, JWT_ACCESS_SECRET: '' })).toThrow(
+      /Missing\. Set a random string of at least 32 characters[\s\S]*at JWT_ACCESS_SECRET/,
+    );
+  });
+
+  describe('the example secret from .env.example', () => {
+    const example = /^JWT_ACCESS_SECRET=(\S+)$/m.exec(
+      readFileSync(new URL('../../.env.example', import.meta.url), 'utf8'),
+    )?.[1];
+
+    it('is accepted for local development, so the quick start works as written', () => {
+      expect(validateEnv({ ...required, JWT_ACCESS_SECRET: example }).JWT_ACCESS_SECRET).toBe(
+        example,
+      );
+    });
+
+    it('stops the API from starting in production', () => {
+      expect(() =>
+        validateEnv({ ...required, NODE_ENV: 'production', JWT_ACCESS_SECRET: example }),
+      ).toThrow(/published in the repository[\s\S]*at JWT_ACCESS_SECRET/);
+    });
+  });
+
+  it('refuses in production the fallback secret an earlier docker-compose.yml used', () => {
+    expect(() =>
+      validateEnv({
+        ...required,
+        NODE_ENV: 'production',
+        JWT_ACCESS_SECRET: 'local-compose-secret-replace-outside-local-runs',
+      }),
+    ).toThrow(/published in the repository/);
+  });
+
+  it('serves the API docs by default, except in production', () => {
+    expect(validateEnv({ ...required, NODE_ENV: 'production' }).SWAGGER_ENABLED).toBe(false);
+    expect(
+      validateEnv({ ...required, NODE_ENV: 'production', SWAGGER_ENABLED: 'true' }).SWAGGER_ENABLED,
+    ).toBe(true);
+    expect(validateEnv({ ...required, NODE_ENV: 'test' }).SWAGGER_ENABLED).toBe(true);
   });
 
   it.each([

@@ -90,7 +90,10 @@ describe('GET /api/v1/users/me (e2e)', () => {
       const foreign = new JwtService({ secret: 'some-other-secret-that-is-32-characters-long' });
 
       await expectRejected(
-        await foreign.signAsync({ sub: userId }, { issuer: JWT_ISSUER, audience: JWT_AUDIENCE }),
+        await foreign.signAsync(
+          { sub: userId },
+          { issuer: JWT_ISSUER, audience: JWT_AUDIENCE, expiresIn: 900 },
+        ),
       );
     });
 
@@ -110,8 +113,14 @@ describe('GET /api/v1/users/me (e2e)', () => {
       );
     });
 
+    it('never expires', async () => {
+      await expectRejected(await jwt.signAsync({ sub: userId }));
+    });
+
     it('was issued for another audience', async () => {
-      await expectRejected(await jwt.signAsync({ sub: userId }, { audience: 'another-service' }));
+      await expectRejected(
+        await jwt.signAsync({ sub: userId }, { audience: 'another-service', expiresIn: 900 }),
+      );
     });
 
     it('is the refresh token', async () => {
@@ -120,7 +129,10 @@ describe('GET /api/v1/users/me (e2e)', () => {
   });
 
   it('reports an account that no longer exists', async () => {
-    const jwtForGhost = await jwt.signAsync({ sub: 'ffffffffffffffffffffffff' });
+    const jwtForGhost = await jwt.signAsync(
+      { sub: 'ffffffffffffffffffffffff' },
+      { expiresIn: 900 },
+    );
 
     const response = await apiClient(app)
       .get(ME)

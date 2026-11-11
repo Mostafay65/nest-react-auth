@@ -61,7 +61,7 @@ describe('AccessTokenService', () => {
     });
     const foreign = new JwtService(createJwtOptions(otherConfig));
 
-    const token = await foreign.signAsync({ sub: USER_ID });
+    const token = await foreign.signAsync({ sub: USER_ID }, { expiresIn: 900 });
 
     await expect(accessTokens.verify(token)).rejects.toBeInstanceOf(UnauthorizedError);
   });
@@ -80,13 +80,23 @@ describe('AccessTokenService', () => {
   });
 
   it('rejects a token meant for another audience', async () => {
-    const token = await jwt.signAsync({ sub: USER_ID }, { audience: 'another-service' });
+    const token = await jwt.signAsync(
+      { sub: USER_ID },
+      { audience: 'another-service', expiresIn: 900 },
+    );
 
     await expect(accessTokens.verify(token)).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it('rejects a validly signed token without a subject', async () => {
-    const token = await jwt.signAsync({ scope: 'none' });
+    const token = await jwt.signAsync({ scope: 'none' }, { expiresIn: 900 });
+
+    await expect(accessTokens.verify(token)).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+
+  it('rejects a validly signed token that never expires', async () => {
+    const token = await jwt.signAsync({ sub: USER_ID });
+    expect(jwt.decode(token)).not.toHaveProperty('exp');
 
     await expect(accessTokens.verify(token)).rejects.toBeInstanceOf(UnauthorizedError);
   });

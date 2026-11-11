@@ -3,9 +3,10 @@ import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { HealthCheck, HealthCheckService, MongooseHealthIndicator } from '@nestjs/terminus';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Public } from '../common/auth/public.decorator.js';
-import { ApiProblemResponse } from '../common/swagger/swagger.js';
+import { ApiOtherProblemsResponse, ApiProblemResponse } from '../common/swagger/swagger.js';
 
 @ApiTags('health')
+@ApiOtherProblemsResponse()
 @Controller({ path: 'health', version: VERSION_NEUTRAL })
 export class HealthController {
   constructor(

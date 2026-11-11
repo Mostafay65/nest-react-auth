@@ -10,14 +10,19 @@ import {
 } from '@nest-react-auth/contracts';
 import { Public } from '../common/auth/public.decorator.js';
 import { API_VERSION, RATE_LIMITS, REFRESH_TOKEN_COOKIE } from '../common/http/api.constants.js';
+import { ApiOtherProblemsResponse } from '../common/swagger/swagger.js';
 import { toUserProfile } from '../users/user.js';
 import { ApiRefresh, ApiSignIn, ApiSignOut, ApiSignUp } from './auth.docs.js';
 import { InvalidRefreshTokenError } from './auth.errors.js';
 import { type AuthResult, AuthService } from './auth.service.js';
 import { RefreshTokenCookie } from './refresh-token.cookie.js';
 
+/**
+ * Each route is marked @Public() on its own rather than the whole class, so a
+ * route added here later needs an access token unless it says otherwise.
+ */
 @ApiTags('auth')
-@Public()
+@ApiOtherProblemsResponse()
 @Controller({ path: 'auth', version: API_VERSION })
 export class AuthController {
   constructor(
@@ -26,6 +31,7 @@ export class AuthController {
   ) {}
 
   @Post('sign-up')
+  @Public()
   @Throttle({ default: RATE_LIMITS.credentials })
   @ApiSignUp()
   async signUp(
@@ -36,6 +42,7 @@ export class AuthController {
   }
 
   @Post('sign-in')
+  @Public()
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: RATE_LIMITS.credentials })
   @ApiSignIn()
@@ -47,6 +54,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @Public()
   @HttpCode(HttpStatus.OK)
   @ApiRefresh()
   async refresh(
@@ -64,6 +72,7 @@ export class AuthController {
   }
 
   @Post('sign-out')
+  @Public()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiSignOut()
   async signOut(

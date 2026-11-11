@@ -80,6 +80,12 @@ describe('Auth API (e2e)', () => {
       ],
       ['a name of spaces', { name: '     ' }, 'name', 'Name is required'],
       [
+        'a name of invisible characters',
+        { name: '\u200B\u200B\u200B' },
+        'name',
+        'Name must be at least 3 characters long',
+      ],
+      [
         'a password under 8 characters',
         { password: 'Ab1!' },
         'password',
@@ -115,6 +121,15 @@ describe('Auth API (e2e)', () => {
         code: 'VALIDATION_FAILED',
         errors: [{ field, message }],
       });
+    });
+
+    it('counts an emoji in a name as one character, as people do', async () => {
+      const name = '😀'.repeat(50);
+
+      const response = await apiClient(app).post(`${AUTH}/sign-up`).send(newUser({ name }));
+
+      expect(response.status).toBe(201);
+      expect(response.body.user.name).toBe(name);
     });
 
     it('lists every invalid field in one response', async () => {
@@ -218,6 +233,17 @@ describe('Auth API (e2e)', () => {
         detail: 'The email or password is incorrect.',
       });
       expect(readCookie(wrongPassword)).toBeUndefined();
+      expect(wrongPassword.get('WWW-Authenticate')).toBe('Bearer');
+    });
+
+    it('accepts the password whether an accent was typed as one character or two', async () => {
+      const client = apiClient(app);
+      const { body } = await signUp(client, { password: 'Caf\u00E9-1234!' });
+
+      await client
+        .post(`${AUTH}/sign-in`)
+        .send({ email: body.email, password: 'Cafe\u0301-1234!' })
+        .expect(200);
     });
 
     it('does not apply the sign-up password rules', async () => {
@@ -322,7 +348,10 @@ describe('Auth API (e2e)', () => {
     });
 
     it('rejects a request without the cookie', async () => {
-      const response = await apiClient(app).post(`${AUTH}/refresh`).expect(401);
+      const response = await apiClient(app)
+        .post(`${AUTH}/refresh`)
+        .expect(401)
+        .expect('WWW-Authenticate', 'Bearer');
 
       expect(response.body.code).toBe('INVALID_REFRESH_TOKEN');
     });

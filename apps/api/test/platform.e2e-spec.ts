@@ -1,6 +1,11 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { apiClient, AUTH, databaseOf, newUser, signUp, startTestApp } from './support/e2e.js';
 
+/** The part of an OpenAPI operation these tests read. */
+interface Operation {
+  responses: Record<string, { content?: unknown; headers?: unknown }>;
+}
+
 describe('HTTP platform (e2e)', () => {
   let app: NestExpressApplication;
 
@@ -124,6 +129,19 @@ describe('HTTP platform (e2e)', () => {
       expect(response.body.errors).toEqual([{ message: 'The request body must be a JSON object' }]);
     });
 
+    it('asks for UTF-8 when the body declares another charset', async () => {
+      const response = await apiClient(app)
+        .post(`${AUTH}/sign-in`)
+        .set('Content-Type', 'application/json; charset=latin1')
+        .send('{"email": "ada@example.com", "password": "Analytical1!"}')
+        .expect(415);
+
+      expect(response.body).toMatchObject({
+        code: 'UNSUPPORTED_MEDIA_TYPE',
+        detail: 'The request body must be JSON encoded as UTF-8.',
+      });
+    });
+
     it('rejects a body over 10 kB', async () => {
       const response = await apiClient(app)
         .post(`${AUTH}/sign-up`)
@@ -199,6 +217,62 @@ describe('HTTP platform (e2e)', () => {
         '/api/v1/auth/sign-up',
         '/api/v1/users/me',
       ]);
+    });
+
+    it('states the real field rules, not looser ones', async () => {
+      const { body } = await apiClient(app).get('/api/docs/openapi.json').expect(200);
+      const { properties } =
+        body.paths[`${AUTH}/sign-up`].post.requestBody.content['application/json'].schema;
+
+      expect(properties.email).toMatchObject({ format: 'email', maxLength: 254 });
+      expect(properties.name).toMatchObject({ minLength: 3, maxLength: 50 });
+      expect(properties.password).toMatchObject({ minLength: 8, maxLength: 128 });
+    });
+
+    it('describes every error with one shared problem+json schema', async () => {
+      const { body } = await apiClient(app).get('/api/docs/openapi.json').expect(200);
+      const operations = Object.values<Record<string, Operation>>(body.paths).flatMap((path) =>
+        Object.values(path),
+      );
+      const errors = operations.flatMap((operation) =>
+        Object.entries(operation.responses).filter(
+          ([status]) => status === 'default' || Number(status) >= 400,
+        ),
+      );
+
+      expect(body.components.schemas.ProblemDetails.required).toEqual(
+        expect.arrayContaining(['type', 'title', 'status', 'detail', 'instance', 'code']),
+      );
+      expect(errors.length).toBeGreaterThan(10);
+      for (const [, response] of errors) {
+        expect(response.content).toEqual({
+          'application/problem+json': { schema: { $ref: '#/components/schemas/ProblemDetails' } },
+        });
+      }
+    });
+
+    it('documents the headers clients act on, and a problem body for any other status', async () => {
+      const { body } = await apiClient(app).get('/api/docs/openapi.json').expect(200);
+      const signIn = body.paths[`${AUTH}/sign-in`].post as Operation;
+
+      expect(signIn.responses['200']?.headers).toHaveProperty('Set-Cookie');
+      expect(signIn.responses['429']?.headers).toHaveProperty('Retry-After');
+      for (const [path, operations] of Object.entries<Record<string, Operation>>(body.paths)) {
+        for (const operation of Object.values(operations)) {
+          expect(Object.keys(operation.responses), path).toContain('default');
+        }
+      }
+    });
+
+    it('documents the answers any write can get before its handler runs', async () => {
+      const { body } = await apiClient(app).get('/api/docs/openapi.json').expect(200);
+
+      for (const route of ['sign-up', 'sign-in', 'refresh', 'sign-out']) {
+        const { responses } = body.paths[`${AUTH}/${route}`].post as Operation;
+        expect(Object.keys(responses), route).toEqual(
+          expect.arrayContaining(['403', '413', '415', '429']),
+        );
+      }
     });
 
     it('serves Swagger UI', async () => {
