@@ -14,7 +14,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.65.0",
-    "@types/node": "^24.19.2",
+    "@types/node": "^26.6.6",
     "oxlint": "^1.93.0",
     "oxlint-tsgolint": "^7.0.2006",
     "typescript": "~6.0.3"

@@ -43,7 +43,7 @@
     "@nestjs/testing": "^12.4.2",
     "@standard-schema/spec": "^1.1.0",
     "@types/express": "^5.0.0",
-    "@types/node": "^24.19.2",
+    "@types/node": "^26.6.6",
     "@types/supertest": "^7.2.1",
     "@vitest/coverage-v8": "^5.1.0",
     "mongodb-memory-server": "^11.3.0",
