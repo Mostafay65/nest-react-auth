@@ -7,7 +7,7 @@ name: nest-react-auth
 # gain privileges; each gets a small writable /tmp.
 services:
   mongo:
-    image: mongo:8.2
+    image: mongo:9.0
     restart: unless-stopped
     ports:
       - '127.0.0.1:27017:27017'
