@@ -11,12 +11,12 @@ How I used AI to build this submission: the tools, the prompts that worked, what
   - three fresh-context reviewer agents for an adversarial review at the end, and a subagent that fixed the web app's findings while the main session fixed the rest.
 - **My part.** I wrote the brief, set the quality bar and the constraints, and chose the design direction and the GitHub setup. I approved the plan and its phase prompts before any code existed, and steered at each decision point. The AI wrote the code, the tests and the docs.
 - **The rule that mattered most:** nothing counts as done until it is verified. Each fix comes with a test that failed before it; the claims in the docs are checked against the code; the images are scanned.
-- **Result:** 333 automated tests:
+- **Result:** 343 automated tests:
   - 50 contract tests;
   - 100 API unit tests;
   - 68 API end-to-end tests;
-  - 93 web tests;
-  - 22 browser tests.
+  - 101 web tests;
+  - 24 browser tests.
 
   Beyond the tests, a call-by-call recorded run against the production Docker image (repeated on the final image, with the same results), both images at 0 HIGH/CRITICAL vulnerabilities, and green CI.
 
@@ -43,16 +43,18 @@ Local time, from the commit history and the session log (10–11 November 2026).
 | 04:13       | Fixes begin: a subagent takes the web app's findings, the main session the rest                       |
 | 05:33       | Final review: a fourth fresh-context agent reads the whole uncommitted change                         |
 | 09:02       | Review fixes committed, after the recorded run was repeated on the final image and every check passed |
+| 09:25       | A theme button (Auto, Light, Dark), added at my request, with its tests                               |
 
-### Decisions I made
+## Decisions I made
 
-| Decision                | Options the AI laid out                                   | My call                                                                                    |
-| ----------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Visual direction        | Three directions, previewed as mock-ups in plan mode      | Editorial "paper and ink": a serif display face, a mono label face, one vermilion accent   |
-| Scope                   | Core requirements only, or every bonus item               | Every bonus item                                                                           |
-| Repository and identity | Repository name; commit author                            | `nest-react-auth`, authored by my GitHub account, configured for this repository only      |
-| GitHub access           | Global sign-in, or a separate credential for this project | Project-only: its own `gh` config folder and a credential helper set in this repo's config |
-| The plan                | The architecture, the phases and their prompts            | Approved before any code was written                                                       |
+| Decision                | Options the AI laid out                                                                        | My call                                                                                    |
+| ----------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Visual direction        | Three directions, previewed as mock-ups in plan mode                                           | Editorial "paper and ink": a serif display face, a mono label face, one vermilion accent   |
+| Scope                   | Core requirements only, or every bonus item                                                    | Every bonus item                                                                           |
+| Repository and identity | Repository name; commit author                                                                 | `nest-react-auth`, authored by my GitHub account, configured for this repository only      |
+| GitHub access           | Global sign-in, or a separate credential for this project                                      | Project-only: its own `gh` config folder and a credential helper set in this repo's config |
+| The plan                | The architecture, the phases and their prompts                                                 | Approved before any code was written                                                       |
+| Theme control           | Follow the device's light or dark setting only, or add a button (asked once the work was done) | A button in the masthead: Auto, Light and Dark, remembered in the browser                  |
 
 ## Workflow
 
@@ -253,8 +255,8 @@ Before anything was committed, one more agent with no prior context read the who
 | Validation rules         | 50 contract tests (shared by the API and the web app), plus end-to-end tests for every rule                                                                                                                                             |
 | API behaviour            | 100 unit tests with in-memory repositories, and 68 end-to-end tests on the real app against MongoDB                                                                                                                                     |
 | The production image     | A recorded run: 54 calls over HTTP against the Docker image, checks of the documents in MongoDB between steps, a read of the API's logs, and a timing comparison. Repeated on the final image: every call gave the same status and body |
-| Web app                  | 93 Testing Library tests with MSW; a console warning or error fails a test                                                                                                                                                              |
-| The whole stack          | 22 Playwright tests through nginx: the journey, guards, forms, two tabs, axe (WCAG 2.2 AA, light and dark), reflow at 320px, touch targets, no CSP violations, and nginx's caching and `Origin` handling                                |
+| Web app                  | 101 Testing Library tests with MSW; a console warning or error fails a test                                                                                                                                                             |
+| The whole stack          | 24 Playwright tests through nginx: the journey, guards, forms, two tabs, the theme button, axe (WCAG 2.2 AA, light and dark), reflow at 320px, touch targets, no CSP violations, and nginx's caching and `Origin` handling              |
 | Security of the images   | Trivy: 0 HIGH/CRITICAL with a fix, in both images                                                                                                                                                                                       |
 | Docs                     | Every command, number and path checked against the code; the architecture guide's diagrams were checked against the implementation                                                                                                      |
 | Everything, on each push | GitHub Actions: format, lint, typecheck, unit tests, build, API end-to-end tests, the Docker stack with the browser suite and an image scan, then images to GHCR                                                                        |
