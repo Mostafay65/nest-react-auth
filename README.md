@@ -15,9 +15,10 @@ A sign-up and sign-in module: a React + TypeScript web app on a NestJS + MongoDB
 | A protected endpoint                                                                                                         | `GET /api/v1/users/me`. Every route needs an access token unless it is marked `@Public()` ([`access-token.guard.ts`](apps/api/src/auth/access-token.guard.ts)).                                                                                                 |
 | Logging                                                                                                                      | Structured pino logs with a request ID on every line ([`logger.options.ts`](apps/api/src/common/logging/logger.options.ts))                                                                                                                                     |
 | Error handling                                                                                                               | RFC 9457 `application/problem+json` with a stable `code` ([`problem-details.filter.ts`](apps/api/src/common/errors/problem-details.filter.ts)). The web app puts each error on the right field ([`form-errors.ts`](apps/web/src/features/auth/form-errors.ts)). |
-| Testing                                                                                                                      | 227 unit and end-to-end tests across the contracts, the API and the web app, 15 browser tests, and a recorded run against the Docker image. See [Tests](#tests).                                                                                                |
+| Testing                                                                                                                      | 311 unit and end-to-end tests across the contracts, the API and the web app, 22 browser tests, and a recorded run against the Docker image. See [Tests](#tests).                                                                                                |
 | CI/CD                                                                                                                        | GitHub Actions: checks, end-to-end tests, the Docker stack, and images pushed to GHCR ([`ci.yml`](.github/workflows/ci.yml))                                                                                                                                    |
 | API documentation                                                                                                            | Swagger UI at `/api/docs`, generated from the same schemas that validate requests ([`swagger.ts`](apps/api/src/common/swagger/swagger.ts))                                                                                                                      |
+| How AI was used (required)                                                                                                   | [AI.md](AI.md): the tools, the prompts that worked, every correction and how it was caught, and how each part was verified                                                                                                                                      |
 
 ## Screenshots
 
@@ -29,10 +30,17 @@ A sign-up and sign-in module: a React + TypeScript web app on a NestJS + MongoDB
 
 ## Quick start (Docker)
 
-Needs Docker with Compose v2.
+Needs Docker with Compose v2, and Node for the start script.
 
 ```sh
-docker compose up -d --build --wait   # or: npm run stack:up
+npm run stack:up
+```
+
+The API needs a JWT secret and refuses to start without one. On its first run, the script writes a random `JWT_ACCESS_SECRET` to `.env`, which Compose reads and git ignores. Without Node, do the same by hand:
+
+```sh
+echo "JWT_ACCESS_SECRET=$(openssl rand -base64 48)" > .env
+docker compose up -d --build --wait
 ```
 
 | URL                                                                  | What                                                             |
@@ -41,7 +49,7 @@ docker compose up -d --build --wait   # or: npm run stack:up
 | [http://localhost:8080/api/docs](http://localhost:8080/api/docs)     | Swagger UI. The OpenAPI document is at `/api/docs/openapi.json`. |
 | [http://localhost:8080/api/health](http://localhost:8080/api/health) | Health check: the API is up and MongoDB answers                  |
 
-nginx serves the web app and proxies `/api` to the API, which has no published port of its own. The compose file is for your own machine: plain HTTP, `COOKIE_SECURE=false` and a throwaway JWT secret (override it with a `JWT_ACCESS_SECRET` environment variable). A real deployment needs TLS, `COOKIE_SECURE=true` and a secret of its own.
+nginx serves the web app and proxies `/api` to the API, which has no published port of its own. The API and web containers run as non-root users, on read-only filesystems, without Linux capabilities. The compose file is for your own machine: plain HTTP, `COOKIE_SECURE=false`, and Swagger switched on. A real deployment needs TLS and `COOKIE_SECURE=true`, and `TRUST_PROXY=2` when a TLS proxy sits in front of nginx.
 
 Stop it with `docker compose down` (or `npm run stack:down`). Add `--volumes` to delete the database as well.
 
@@ -68,19 +76,19 @@ In development the API logs one readable line per request. In production it logs
 
 The API reads `apps/api/.env` in development and validates every variable at startup. If one is invalid, it refuses to start and says which one ([`env.ts`](apps/api/src/config/env.ts)).
 
-| Variable                    | Default            | Rule                                                                                                                                               |
-| --------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NODE_ENV`                  | `development`      | `development`, `test` or `production`                                                                                                              |
-| `PORT`                      | `3000`             | 1 to 65535                                                                                                                                         |
-| `LOG_LEVEL`                 | `info`             | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`                                                                                     |
-| `MONGODB_URI`               | required           | Starts with `mongodb://` or `mongodb+srv://`                                                                                                       |
-| `JWT_ACCESS_SECRET`         | required           | At least 32 characters. Generate one with `openssl rand -base64 48`.                                                                               |
-| `ACCESS_TOKEN_TTL_SECONDS`  | `900` (15 minutes) | A positive whole number                                                                                                                            |
-| `REFRESH_TOKEN_TTL_SECONDS` | `604800` (7 days)  | A positive whole number                                                                                                                            |
-| `COOKIE_SECURE`             | `true`             | `true` or `false`. Set `false` only for local runs over plain HTTP.                                                                                |
-| `TRUST_PROXY`               | `0`                | The number of reverse proxies in front of the API, so rate limits see the client's real IP                                                         |
-| `CORS_ORIGINS`              | empty              | Comma-separated bare origins such as `https://app.example.com`. Empty means same-origin only. They are also trusted by the cross-site write check. |
-| `SWAGGER_ENABLED`           | `true`             | `true` or `false`                                                                                                                                  |
+| Variable                    | Default                                       | Rule                                                                                                                                                                                                                                                                          |
+| --------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                  | `development`                                 | `development`, `test` or `production`                                                                                                                                                                                                                                         |
+| `PORT`                      | `3000`                                        | 1 to 65535                                                                                                                                                                                                                                                                    |
+| `LOG_LEVEL`                 | `info`                                        | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`                                                                                                                                                                                                                |
+| `MONGODB_URI`               | required                                      | Starts with `mongodb://` or `mongodb+srv://`                                                                                                                                                                                                                                  |
+| `JWT_ACCESS_SECRET`         | required                                      | At least 32 characters. Generate one with `openssl rand -base64 48`. With `NODE_ENV=production`, the API refuses the placeholder from `.env.example` and any other secret published in this repository.                                                                       |
+| `ACCESS_TOKEN_TTL_SECONDS`  | `900` (15 minutes)                            | A positive whole number                                                                                                                                                                                                                                                       |
+| `REFRESH_TOKEN_TTL_SECONDS` | `604800` (7 days)                             | A positive whole number                                                                                                                                                                                                                                                       |
+| `COOKIE_SECURE`             | `true`                                        | `true` or `false`. Set `false` only for local runs over plain HTTP.                                                                                                                                                                                                           |
+| `TRUST_PROXY`               | `0`                                           | The number of reverse proxies in front of the API, so rate limits and logs see the client's real IP. Set it to the exact number. Too low, and every client shares the proxy's IP and so one rate limit; too high, and a client can pick its own IP through `X-Forwarded-For`. |
+| `CORS_ORIGINS`              | empty                                         | Comma-separated bare origins such as `https://app.example.com`. Empty means same-origin only. They are also trusted by the cross-site write check.                                                                                                                            |
+| `SWAGGER_ENABLED`           | `true`, or `false` when `NODE_ENV=production` | `true` or `false`. Serves Swagger UI and the OpenAPI document at `/api/docs`.                                                                                                                                                                                                 |
 
 ## API
 
@@ -95,35 +103,36 @@ The API reads `apps/api/.env` in development and validates every variable at sta
 
 - **A session** is `{ accessToken, tokenType: "Bearer", expiresIn, user: { id, email, name, createdAt } }`. The refresh token never appears in a body. It travels in an `httpOnly`, `SameSite=Strict` cookie limited to `/api/v1/auth`.
 - **Rate limits.** Sign-up and sign-in each allow 10 requests per minute per IP. The other routes allow 100, and the health check has no limit. Above the limit the answer is 429 `RATE_LIMITED`.
-- **Any request** can also get 403 `FORBIDDEN` (a write sent from another site), 400 `MALFORMED_REQUEST` (a body that is not valid JSON) or 413 `PAYLOAD_TOO_LARGE` (a body over 10 kB).
+- **Any POST** can also get 403 `FORBIDDEN` (sent from another site), 400 `MALFORMED_REQUEST` (a body that is not valid JSON), 413 `PAYLOAD_TOO_LARGE` (a body over 10 kB) or 415 `UNSUPPORTED_MEDIA_TYPE` (a charset other than UTF-8).
+- **Every 401** carries `WWW-Authenticate: Bearer`, and every 429 carries `Retry-After`.
 - **Errors** follow one format, described in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#errors).
 
 ## Tests
 
-| Suite          | What it proves                                                                                                                                                                                     | Command                                           | Tests |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ----- |
-| Contracts      | The validation rules shared by the API and the web app, including emoji in passwords and MongoDB operators as values                                                                               | `npm test -w @nest-react-auth/contracts`          | 37    |
-| API unit       | Every service branch, the guard, the error filter, config and middleware, with in-memory repositories                                                                                              | `npm test -w @nest-react-auth/api`                | 83    |
-| API end-to-end | The real app, built by the same `createApp()` as production, against MongoDB (mongodb-memory-server)                                                                                               | `npm run test:e2e`                                | 56    |
-| Web unit       | Session restore, refresh and retry, both forms, the welcome page, the route guards, colour contrast                                                                                                | `npm test -w @nest-react-auth/web`                | 51    |
-| Browser        | Playwright, through nginx against the Docker stack: the full journey, route guards, form errors, axe scans (WCAG 2.2 AA, light and dark, no sideways scroll at 390px) and a CSP with no violations | `npm run test:browser` (after `npm run stack:up`) | 15    |
+| Suite          | What it proves                                                                                                                                                                                                                                                      | Command                                           | Tests |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ----- |
+| Contracts      | The validation rules shared by the API and the web app, including emoji in passwords and MongoDB operators as values                                                                                                                                                | `npm test -w @nest-react-auth/contracts`          | 48    |
+| API unit       | Every service branch, the guard, the error filter, config and middleware, with in-memory repositories                                                                                                                                                               | `npm test -w @nest-react-auth/api`                | 100   |
+| API end-to-end | The real app, built by the same `createApp()` as production, against MongoDB (mongodb-memory-server)                                                                                                                                                                | `npm run test:e2e`                                | 67    |
+| Web unit       | Session restore, refresh and retry, tabs following each other, request time limits, both forms, the welcome page, the route guards, the error page, colour contrast                                                                                                 | `npm test -w @nest-react-auth/web`                | 90    |
+| Browser        | Playwright, through nginx against the Docker stack: the full journey, route guards, form errors, two tabs, axe scans (WCAG 2.2 AA, light and dark), no sideways scroll at 320px, touch targets, a CSP with no violations, and nginx's caching and `Origin` handling | `npm run test:browser` (after `npm run stack:up`) | 22    |
 
 - `npm test` runs the contracts, API unit and web suites together. Add coverage with `npm run test:cov -w @nest-react-auth/api` (or `-w @nest-react-auth/web`).
 - The first `npm run test:e2e` downloads a MongoDB binary for mongodb-memory-server.
-- [docs/E2E_TEST_REPORT.md](docs/E2E_TEST_REPORT.md) records a run against the production Docker image. It calls every endpoint over HTTP (49 calls), checks each response and the matching documents in MongoDB, and compares response times for a wrong password and an unknown email.
+- [docs/E2E_TEST_REPORT.md](docs/E2E_TEST_REPORT.md) records a run against the production Docker image. It calls every endpoint over HTTP (54 calls), checks each response, the matching documents in MongoDB and the API's logs, and compares response times for a wrong password and an unknown email. It ends with the browser run.
 
 ## CI/CD
 
 [`ci.yml`](.github/workflows/ci.yml) runs on every push to `main` and on every pull request.
 
-| Job       | What it does                                                                                                                                                                        |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `checks`  | Format check, lint (oxlint for the API, contracts and browser tests; ESLint for the web app), typecheck, unit tests, build                                                          |
-| `api-e2e` | The API end-to-end suite against mongodb-memory-server, with the MongoDB binary cached                                                                                              |
-| `stack`   | Builds both images, starts the compose stack, waits for every health check, smoke-tests the app and the API through nginx, then runs the browser suite and uploads its report       |
-| `publish` | On `main` only, once the three jobs above pass: pushes `ghcr.io/mostafay65/nest-react-auth-api` and `ghcr.io/mostafay65/nest-react-auth-web`, tagged `latest` and `sha-<short SHA>` |
+| Job       | What it does                                                                                                                                                                                                                                                                                |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `checks`  | Format check, lint (oxlint for the API, contracts and browser tests; ESLint for the web app), typecheck, unit tests, build                                                                                                                                                                  |
+| `api-e2e` | The API end-to-end suite against mongodb-memory-server, with the MongoDB binary cached                                                                                                                                                                                                      |
+| `stack`   | Starts the stack with `npm run stack:up` (both images built, every health check waited for), smoke-tests the app and the API through nginx, runs the browser suite and uploads its report, then scans both images with Trivy: a HIGH or CRITICAL vulnerability that has a fix fails the run |
+| `publish` | On `main` only, once the three jobs above pass: pushes the images the `stack` job tested, not a rebuild, as `ghcr.io/mostafay65/nest-react-auth-api` and `ghcr.io/mostafay65/nest-react-auth-web`, tagged `latest` and `sha-<short SHA>`                                                    |
 
-Dependabot opens weekly updates for npm packages (minor and patch versions grouped), GitHub Actions and the Docker base images.
+Dependabot opens weekly updates for npm packages (minor and patch versions grouped), GitHub Actions and the MongoDB image. The base images need no pull requests: their tags (`node:24-alpine`, `nginx-unprivileged:1.30-alpine-slim`) follow each branch's latest release, and every build runs `apk upgrade`. A few moves are left to a person: a new Node major (with `.nvmrc`), TypeScript 7 (once typescript-eslint supports it), and nginx's next stable branch, because Dependabot can't tell nginx's stable versions from its mainline ones.
 
 ## Project structure
 
@@ -135,6 +144,8 @@ e2e                  Playwright browser tests
 docs                 Architecture guide, end-to-end test report, screenshots
 .github              CI workflow and Dependabot
 docker-compose.yml   MongoDB, the API and the web app
+AI.md                How AI was used to build this
+CLAUDE.md            Rules for AI coding agents working in this repo
 ```
 
 ## Design decisions
@@ -145,13 +156,14 @@ Each one is explained in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Two tokens.** A 15-minute JWT kept in memory, and an opaque refresh token in an `httpOnly` cookie that rotates on every use. Reusing an old one ends the session. ([Sessions and tokens](docs/ARCHITECTURE.md#sessions-and-tokens))
 - **One error format.** Every error is problem+json with a stable `code`, which the web app uses to place the message. ([Errors](docs/ARCHITECTURE.md#errors))
 - **Shared contracts.** One set of Zod schemas validates requests, generates the OpenAPI document, and drives the web forms and the password checklist. ([System](docs/ARCHITECTURE.md#system))
-- **Secure by default.** Routes need a token unless marked `@Public()`, configuration is checked at startup, sign-in is rate-limited and takes as long for an unknown email as for a wrong password, and the API and web containers run as non-root users. ([Security](docs/ARCHITECTURE.md#security))
+- **Secure by default.** Routes need a token unless marked `@Public()`, configuration is checked at startup, sign-in is rate-limited and takes as long for an unknown email as for a wrong password, and the API and web containers run as non-root users on read-only filesystems. ([Security](docs/ARCHITECTURE.md#security))
 - **One origin.** nginx serves the app and proxies `/api`, so the refresh cookie is first-party and CORS stays off. ([System](docs/ARCHITECTURE.md#system))
 - **An editorial UI without a component kit.** CSS Modules over light and dark tokens, a test that checks WCAG AA contrast, and focus handling for keyboard and screen reader users. ([Web app](docs/ARCHITECTURE.md#web-app))
 
 ## Trade-offs and next steps
 
 - **Strict reuse detection.** A refresh token presented twice ends the session, even after a harmless race. The web client sends one refresh at a time to avoid that.
+- **Sign-out ends the session, not the access token.** The web app forgets its token at once, but a copy taken earlier works until it expires, 15 minutes at most.
 - **In-memory rate limits.** They count per API instance. Several instances would need a shared store such as Redis.
 - **Not built:** email verification, password reset, MFA and "sign out everywhere".
 

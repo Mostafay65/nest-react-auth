@@ -5,7 +5,7 @@ Rules for AI coding agents in this repo. The reasons behind them are in `docs/AR
 ## Map
 
 - `packages/contracts`: Zod schemas, password rules and error codes, shared by the API and the web app. `npm ci` builds it (postinstall), and `npm run dev` rebuilds it on change.
-- `apps/api`: NestJS 12 (ESM, `nodenext`, so relative imports end in `.js`) with Mongoose. It has `src/auth`, `src/users`, `src/health`, `src/config/env.ts` and `src/common` (errors, validation, logging, HTTP, Swagger). Unit tests live next to the code (`*.spec.ts`), end-to-end tests in `test/*.e2e-spec.ts`.
+- `apps/api`: NestJS 12 (ESM, `nodenext`, so relative imports end in `.js`) with Mongoose. It has `src/auth`, `src/users`, `src/health`, `src/database` (the connection), `src/config/env.ts` and `src/common` (errors, validation, logging, HTTP, Swagger). Unit tests live next to the code (`*.spec.ts`), end-to-end tests in `test/*.e2e-spec.ts`.
 - `apps/web`: React 19, Vite 8, React Router 8. It has `src/app` (routes, frame), `src/features`, `src/pages` and `src/shared` (HTTP client, styles, UI).
 - `e2e`: Playwright tests against the Docker stack.
 
@@ -23,7 +23,8 @@ Node 24 (`.nvmrc`). From the repo root:
 
 - Controllers handle HTTP only: bodies, cookies, status codes and Swagger decorators. Services hold the rules.
 - Services depend on abstract repository classes, which double as DI tokens and are bound in the module (`{ provide: UsersRepository, useClass: MongooseUsersRepository }`).
-- Only `Mongoose*Repository` classes import Mongoose. They return plain objects (`User`, `StoredRefreshToken`), never documents.
+- Mongoose stays in the persistence code: the `Mongoose*Repository` classes, their `*.schema.ts` files, `src/database`, and the modules that register the schemas. Services and controllers never import it. Repositories return plain objects (`User`, `StoredRefreshToken`), never documents.
+- Field lengths and formats are checked once, by the contract schemas. Don't repeat them as Mongoose validators: `maxlength` counts UTF-16 units, so it disagrees with Zod about emoji.
 - Services throw `AppError` subclasses (`src/common/errors/app-error.ts`) with a code from `ERROR_CODES` in contracts. They never throw `HttpException`. To add a code:
   1. add it to `packages/contracts/src/errors.ts`;
   2. map it in `STATUS_BY_CODE` in `src/common/errors/problem-details.filter.ts`.
@@ -33,7 +34,7 @@ Node 24 (`.nvmrc`). From the repo root:
   1. add it to `envSchema` in `src/config/env.ts` and to `apps/api/.env.example`;
   2. read it with `ConfigService<Env, true>` and `{ infer: true }`.
 - Never log tokens, passwords, hashes or headers. Log IDs (`userId`, `familyId`) instead.
-- Document every new route: `@ApiProblemResponse(status, …)` for each error it can return, and `standardSchema` for each success body.
+- Document every new route: `@ApiProblemResponse(status, …)` for each error it can return, `@ApiRateLimitResponse()`, `@ApiWriteProblemResponses()` on writes, and `standardSchema` for each success body.
 
 ## Web rules
 

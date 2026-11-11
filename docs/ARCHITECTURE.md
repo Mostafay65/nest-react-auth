@@ -71,11 +71,11 @@ flowchart TB
 What happens to a request, in order ([`app.setup.ts`](../apps/api/src/app.setup.ts), [`app.module.ts`](../apps/api/src/app.module.ts)):
 
 1. **Request ID.** A caller's `X-Request-Id` is kept if it is short and log-safe. Otherwise a UUID is generated. The ID is echoed in the response header and the error body, and appears on every log line.
-2. **No caching.** Every response gets `Cache-Control: no-store`, and ETags are off. Responses hold tokens and personal data, so no browser or proxy keeps a copy, not even after sign-out.
+2. **No caching.** Every response gets `Cache-Control: no-store`, and API responses carry no ETag. Responses hold tokens and personal data, so no browser or proxy keeps a copy, not even after sign-out.
 3. **Security headers.** CSP, HSTS, `X-Content-Type-Options` and the rest, via Nest's built-in `useSecurityHeaders()`.
-4. **Cross-site write check.** Nest's `enableCsrfProtection()` rejects a state-changing request whose `Sec-Fetch-Site` says another site sent it. When the browser doesn't send `Sec-Fetch-Site`, it compares `Origin` with `Host`.
+4. **Cross-site write check.** Nest's `enableCsrfProtection()` rejects a state-changing request whose `Sec-Fetch-Site` says another site sent it. When the browser doesn't send `Sec-Fetch-Site`, it compares `Origin` with `Host`. nginx forwards the `Host` the browser sent, port included, so the comparison holds behind the proxy.
 5. **CORS**, when origins are configured.
-6. **JSON body** of at most 10 kB. Nothing else is parsed.
+6. **JSON body** of at most 10 kB, in UTF-8. Nothing else is parsed.
 7. **Request log** (pino-http).
 8. **Guards**, in this order:
    - the rate limit (per client IP);
@@ -86,16 +86,16 @@ What happens to a request, in order ([`app.setup.ts`](../apps/api/src/app.setup.
 
 ## Sessions and tokens
 
-|                 | Access token                                             | Refresh token                                                                             |
-| --------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Form            | JWT, HS256, with `iss`, `aud` and a random `jti`         | 256 random bits, base64url, opaque                                                        |
-| Lifetime        | 15 minutes                                               | 7 days, renewed on every refresh                                                          |
-| Travels in      | the response body, then `Authorization: Bearer`          | an `httpOnly`, `SameSite=Strict` cookie, `Path=/api/v1/auth`, `Secure` outside local HTTP |
-| Client keeps it | in memory only                                           | the browser keeps it; scripts can't read it                                               |
-| Server stores   | nothing                                                  | the SHA-256 hash only, with its session (`familyId`) and `usedAt`                         |
-| Verification    | signature, algorithm, issuer, audience and expiry pinned | hash lookup, then expiry, then an atomic "claim"                                          |
+|                 | Access token                                                                                | Refresh token                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Form            | JWT, HS256, with `iss`, `aud` and a random `jti`                                            | 256 random bits, base64url, opaque                                                        |
+| Lifetime        | 15 minutes                                                                                  | 7 days, renewed on every refresh                                                          |
+| Travels in      | the response body, then `Authorization: Bearer`                                             | an `httpOnly`, `SameSite=Strict` cookie, `Path=/api/v1/auth`, `Secure` outside local HTTP |
+| Client keeps it | in memory only                                                                              | the browser keeps it; scripts can't read it                                               |
+| Server stores   | nothing                                                                                     | the SHA-256 hash only, with its session (`familyId`) and `usedAt`                         |
+| Verification    | signature, algorithm, issuer, audience and expiry checked; a token without `exp` is refused | hash lookup, then expiry, then an atomic "claim"                                          |
 
-**Why this split.** The short-lived access token is never stored by the browser, so an XSS bug can't take it away for later use. The refresh token can't be read by scripts at all. `SameSite=Strict` plus the cross-site write check stop other sites from using it. Its path keeps it off every request except the auth routes.
+**Why this split.** The browser never stores the access token, so nothing can read it from storage later, and a copied one works for 15 minutes at most. Injected script (XSS) could still use it while the page is open; the strict CSP is the defence against that. The refresh token can't be read by scripts at all. `SameSite=Strict` plus the cross-site write check stop other sites from using it. Its path keeps it off every request except the auth routes.
 
 ### Sign-in
 
@@ -145,7 +145,7 @@ sequenceDiagram
 ```
 
 - **Rotation.** Every refresh retires the presented token and issues its successor in the same family (one family per sign-in).
-- **Reuse detection** ([RFC 9700 §4.14.2](https://www.rfc-editor.org/rfc/rfc9700#section-4.14.2)). A retired token can only come back if someone copied it. The API then ends the whole family, so neither the thief nor the user can go on, and the user signs in again. Other sessions (other devices) are untouched.
+- **Reuse detection** ([RFC 9700 §4.14.2](https://www.rfc-editor.org/rfc/rfc9700#section-4.14.2)). A retired token can only come back if someone copied it. The API then ends the whole family, so neither the thief nor the user can refresh again, and the user signs in again. An access token issued before that keeps working until it expires, 15 minutes at most (see [Sign-out](#sign-out)). Other sessions (other devices) are untouched.
 - **A race ends the session too.** Only one `updateOne` can match `usedAt: null`, so of two requests with the same token, one wins and the other counts as reuse. The successor is stored before the claim, so that revocation also removes the token the winner received, whichever request finishes first. Unit tests force both orders, and an end-to-end test runs the race against MongoDB.
 - **Forged tokens are harmless.** Lookup is by hash, so a made-up token matches nothing and revokes nothing.
 - **Clean-up.** A TTL index removes expired tokens.
@@ -154,19 +154,23 @@ sequenceDiagram
 
 `POST /auth/sign-out` deletes the token's family and clears the cookie. It answers 204 even without a cookie, so it is safe to call twice.
 
+The access token is not revoked. The web app forgets its copy at once, but a copy taken earlier stays valid until it expires, 15 minutes at most. Revoking it immediately would mean a lookup on every request (a denylist of `jti` values), which this design gives up for verification without a database call. See [trade-offs](#trade-offs-and-next-steps).
+
 ## Data model
 
 **`users`**
 
-| Field                    | Type     | Notes                                                                                          |
-| ------------------------ | -------- | ---------------------------------------------------------------------------------------------- |
-| `_id`                    | ObjectId |                                                                                                |
-| `email`                  | string   | trimmed, lower-cased, at most 254 characters, **unique index**                                 |
-| `name`                   | string   | trimmed, 3–50 characters (checked at the edge)                                                 |
-| `passwordHash`           | string   | argon2id, 19 MiB, 2 passes, 1 lane. `select: false`: left out of every query unless asked for. |
-| `createdAt`, `updatedAt` | Date     |                                                                                                |
+| Field                    | Type     | Notes                                                                                                                          |
+| ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `_id`                    | ObjectId |                                                                                                                                |
+| `email`                  | string   | trimmed, lower-cased, at most 254 characters (checked at the edge), **unique index**                                           |
+| `name`                   | string   | trimmed, NFC-normalised, 3–50 characters with at least 3 visible, no line breaks or control characters (checked at the edge)   |
+| `passwordHash`           | string   | argon2id of the NFKC-normalised password, 19 MiB, 2 passes, 1 lane. `select: false`: left out of every query unless asked for. |
+| `createdAt`, `updatedAt` | Date     |                                                                                                                                |
 
 The unique index is what makes sign-up safe under races: two simultaneous sign-ups with one email produce one account and one 409. The end-to-end suite tests exactly that.
+
+Lengths are checked once, by the contract schemas, which count Unicode code points: an emoji like 😀 is one, though one drawn from several, such as a flag, counts each of its parts. The Mongoose schema doesn't repeat them: its `maxlength` counts UTF-16 units and would reject a valid name of 50 emoji.
 
 **`refresh_tokens`**
 
@@ -197,39 +201,46 @@ Every error is an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `applicatio
 }
 ```
 
-| `code`                     | Status | When                                                                                  |
-| -------------------------- | ------ | ------------------------------------------------------------------------------------- |
-| `VALIDATION_FAILED`        | 400    | a field breaks a rule. `errors` lists every failure at once.                          |
-| `MALFORMED_REQUEST`        | 400    | the body is not valid JSON, or the request is otherwise unreadable                    |
-| `EMAIL_ALREADY_REGISTERED` | 409    | sign-up with a registered email                                                       |
-| `INVALID_CREDENTIALS`      | 401    | sign-in with a wrong password or an unknown email (one answer for both)               |
-| `INVALID_REFRESH_TOKEN`    | 401    | the refresh cookie is missing, unknown, expired, or was already used                  |
-| `UNAUTHORIZED`             | 401    | no access token, or one that fails verification; sent with `WWW-Authenticate: Bearer` |
-| `FORBIDDEN`                | 403    | a cross-site write                                                                    |
-| `NOT_FOUND`                | 404    | an unknown route, or a user deleted after their token was issued                      |
-| `PAYLOAD_TOO_LARGE`        | 413    | a body over 10 kB                                                                     |
-| `RATE_LIMITED`             | 429    | too many requests; sent with `Retry-After`                                            |
-| `SERVICE_UNAVAILABLE`      | 503    | the health check failed                                                               |
-| `INTERNAL_ERROR`           | 500    | anything unexpected. The details go to the log, never to the client.                  |
+| `code`                     | Status | When                                                                             |
+| -------------------------- | ------ | -------------------------------------------------------------------------------- |
+| `VALIDATION_FAILED`        | 400    | a field breaks a rule. `errors` lists every failure at once.                     |
+| `MALFORMED_REQUEST`        | 400    | the body is not valid JSON, or the request is otherwise unreadable               |
+| `EMAIL_ALREADY_REGISTERED` | 409    | sign-up with a registered email                                                  |
+| `INVALID_CREDENTIALS`      | 401    | sign-in with a wrong password or an unknown email (one answer for both)          |
+| `INVALID_REFRESH_TOKEN`    | 401    | the refresh cookie is missing, unknown, expired, or was already used             |
+| `UNAUTHORIZED`             | 401    | no access token, or one that fails verification                                  |
+| `FORBIDDEN`                | 403    | a cross-site write                                                               |
+| `NOT_FOUND`                | 404    | an unknown route, or a user deleted after their token was issued                 |
+| `PAYLOAD_TOO_LARGE`        | 413    | a body over 10 kB                                                                |
+| `UNSUPPORTED_MEDIA_TYPE`   | 415    | a JSON body in a charset other than UTF-8, or with an unknown `Content-Encoding` |
+| `RATE_LIMITED`             | 429    | too many requests                                                                |
+| `SERVICE_UNAVAILABLE`      | 503    | the health check failed                                                          |
+| `INTERNAL_ERROR`           | 500    | anything unexpected. The details go to the log, never to the client.             |
+
+Every 401 carries `WWW-Authenticate: Bearer`, as RFC 9110 requires, and every 429 carries `Retry-After`. The OpenAPI document describes every error response with one shared `ProblemDetails` schema.
 
 ## Security
 
-| Threat                                    | Defence                                                                                                                    | Where                                                                                                                                                           |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stolen password database                  | argon2id at OWASP's minimum cost; refresh tokens stored as SHA-256 hashes                                                  | [`password-hasher.ts`](../apps/api/src/auth/password-hasher.ts), [`refresh-token.crypto.ts`](../apps/api/src/auth/refresh-tokens/refresh-token.crypto.ts)       |
-| Account enumeration through sign-in       | one answer for a wrong password and an unknown email, and an argon2 verification on both paths                             | [`auth.service.ts`](../apps/api/src/auth/auth.service.ts)                                                                                                       |
-| Password guessing                         | sign-in and sign-up each allow 10 requests per minute per client IP (other routes: 100)                                    | [`api.constants.ts`](../apps/api/src/common/http/api.constants.ts)                                                                                              |
-| Forged or tampered access tokens          | HS256 only; issuer, audience and expiry checked; `alg: none` refused                                                       | [`jwt.options.ts`](../apps/api/src/auth/jwt.options.ts)                                                                                                         |
-| Stolen refresh token                      | rotation with reuse detection; `httpOnly`; narrow cookie path                                                              | [`refresh-token.service.ts`](../apps/api/src/auth/refresh-tokens/refresh-token.service.ts)                                                                      |
-| CSRF                                      | `SameSite=Strict`, plus the `Sec-Fetch-Site`/`Origin` check on every write                                                 | [`app.setup.ts`](../apps/api/src/app.setup.ts)                                                                                                                  |
-| NoSQL injection                           | schemas accept strings only; Mongoose `sanitizeFilter` on every query                                                      | [`auth.ts`](../packages/contracts/src/auth.ts), [`database.module.ts`](../apps/api/src/database/database.module.ts)                                             |
-| Mass assignment                           | unknown fields are rejected (`z.strictObject`)                                                                             | [`auth.ts`](../packages/contracts/src/auth.ts)                                                                                                                  |
-| Oversized or malformed bodies             | JSON only, 10 kB limit, clean 400/413 answers                                                                              | [`app.setup.ts`](../apps/api/src/app.setup.ts)                                                                                                                  |
-| Token theft through XSS                   | the access token lives in memory only, the refresh token is `httpOnly`, and nginx sends a strict CSP (`script-src 'self'`) | [`session-store.ts`](../apps/web/src/features/auth/session-store.ts), [`security-headers.conf`](../apps/web/nginx/security-headers.conf)                        |
-| Responses left in browser or proxy caches | `Cache-Control: no-store` on every API response, and no ETags                                                              | [`no-store.middleware.ts`](../apps/api/src/common/http/no-store.middleware.ts)                                                                                  |
-| Leaking internals                         | generic 500s; headers (and so tokens and cookies) never logged                                                             | [`problem-details.filter.ts`](../apps/api/src/common/errors/problem-details.filter.ts), [`logger.options.ts`](../apps/api/src/common/logging/logger.options.ts) |
-| Bad configuration reaching production     | every variable validated at startup; the process refuses to start otherwise                                                | [`env.ts`](../apps/api/src/config/env.ts)                                                                                                                       |
-| Vulnerable or overprivileged containers   | non-root users; no package managers in the API image; 0 HIGH/CRITICAL findings (Trivy)                                     | [`apps/api/Dockerfile`](../apps/api/Dockerfile), [`apps/web/Dockerfile`](../apps/web/Dockerfile)                                                                |
+| Threat                                     | Defence                                                                                                                                                                                                             | Where                                                                                                                                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stolen password database                   | argon2id at OWASP's minimum cost; refresh tokens stored as SHA-256 hashes                                                                                                                                           | [`password-hasher.ts`](../apps/api/src/auth/password-hasher.ts), [`refresh-token.crypto.ts`](../apps/api/src/auth/refresh-tokens/refresh-token.crypto.ts)                                |
+| Account enumeration through sign-in        | one answer for a wrong password and an unknown email, and an argon2 verification on both paths                                                                                                                      | [`auth.service.ts`](../apps/api/src/auth/auth.service.ts)                                                                                                                                |
+| Password guessing                          | sign-in and sign-up each allow 10 requests per minute per client IP (other routes: 100)                                                                                                                             | [`api.constants.ts`](../apps/api/src/common/http/api.constants.ts)                                                                                                                       |
+| Dodging rate limits with `X-Forwarded-For` | the API trusts exactly `TRUST_PROXY` proxy hops (1 behind nginx), and nginx appends the address it sees, so the client can't pick its IP                                                                            | [`app.setup.ts`](../apps/api/src/app.setup.ts), [`default.conf`](../apps/web/nginx/default.conf)                                                                                         |
+| Forged or tampered access tokens           | HS256 only; issuer, audience and expiry checked; `alg: none` and tokens without `exp` refused                                                                                                                       | [`jwt.options.ts`](../apps/api/src/auth/jwt.options.ts)                                                                                                                                  |
+| Stolen refresh token                       | rotation with reuse detection; `httpOnly`; narrow cookie path                                                                                                                                                       | [`refresh-token.service.ts`](../apps/api/src/auth/refresh-tokens/refresh-token.service.ts)                                                                                               |
+| CSRF                                       | `SameSite=Strict`, plus the `Sec-Fetch-Site`/`Origin` check on every write                                                                                                                                          | [`app.setup.ts`](../apps/api/src/app.setup.ts)                                                                                                                                           |
+| NoSQL injection                            | schemas accept strings only; Mongoose `sanitizeFilter` on every query                                                                                                                                               | [`auth.ts`](../packages/contracts/src/auth.ts), [`database.module.ts`](../apps/api/src/database/database.module.ts)                                                                      |
+| Mass assignment                            | unknown fields are rejected (`z.strictObject`)                                                                                                                                                                      | [`auth.ts`](../packages/contracts/src/auth.ts)                                                                                                                                           |
+| Spoofed or blank-looking names             | line breaks, control characters and bidi overrides refused; invisible characters don't count towards the minimum                                                                                                    | [`auth.ts`](../packages/contracts/src/auth.ts)                                                                                                                                           |
+| Oversized or malformed bodies              | UTF-8 JSON only, 10 kB limit, clean 400/413/415 answers                                                                                                                                                             | [`app.setup.ts`](../apps/api/src/app.setup.ts)                                                                                                                                           |
+| Token theft through XSS                    | the access token lives in memory only, the refresh token is `httpOnly`, and nginx sends a strict CSP (`script-src 'self'`)                                                                                          | [`session-store.ts`](../apps/web/src/features/auth/session-store.ts), [`security-headers.conf`](../apps/web/nginx/security-headers.conf)                                                 |
+| Responses left in browser or proxy caches  | `Cache-Control: no-store` and no ETag on every API response                                                                                                                                                         | [`no-store.middleware.ts`](../apps/api/src/common/http/no-store.middleware.ts)                                                                                                           |
+| Leaking internals                          | generic 500s; headers (and so tokens and cookies) never logged                                                                                                                                                      | [`problem-details.filter.ts`](../apps/api/src/common/errors/problem-details.filter.ts), [`logger.options.ts`](../apps/api/src/common/logging/logger.options.ts)                          |
+| Bad configuration reaching production      | every variable validated at startup; under `NODE_ENV=production`, the secrets this repository has published are refused and Swagger is off by default                                                               | [`env.ts`](../apps/api/src/config/env.ts)                                                                                                                                                |
+| Vulnerable or overprivileged containers    | non-root users; npm, corepack and yarn removed from the API image; read-only filesystems, no Linux capabilities and `no-new-privileges` in Compose; CI fails on any HIGH or CRITICAL finding that has a fix (Trivy) | [`apps/api/Dockerfile`](../apps/api/Dockerfile), [`apps/web/Dockerfile`](../apps/web/Dockerfile), [`docker-compose.yml`](../docker-compose.yml), [`ci.yml`](../.github/workflows/ci.yml) |
+
+**Known findings.** `npm audit` reports 10 moderate findings, all in lint tooling that never ships: minimatch below 11.0.1 ([GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249)), which ESLint 10 and typescript-eslint still depend on, with no fixed release yet. The bug needs attacker-controlled glob patterns, and lint configs are ours. The production dependencies have none (`npm audit --omit=dev`). The API image keeps `apk` on purpose: Trivy reads Alpine's package database to find vulnerable packages.
 
 ## Logging
 
@@ -240,18 +251,18 @@ Every error is an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `applicatio
   {
     "level": 40,
     "req": {
-      "id": "b389f9d3-06b2-4688-8676-e6dc32beeb6b",
+      "id": "fd973976-09e0-4a32-8c81-3d0828b7fc55",
       "method": "POST",
       "url": "/api/v1/auth/refresh",
       "ip": "::ffff:172.20.0.1"
     },
     "context": "RefreshTokenService",
-    "familyId": "68f7255f-c44e-4032-a66f-8c3a14a6e494",
-    "userId": "6af38919a86f5f0be43d328f",
+    "familyId": "f41b702c-1fa2-451f-9bfb-30a9cb6a53cc",
+    "userId": "6af3dee7ab768b067a5599fe",
     "msg": "Refresh token reuse detected; session revoked"
   }
   ```
-- **Requests rejected before routing** (invalid JSON, oversized bodies, cross-site writes) never reach the request logger. The error filter logs them instead, so every request leaves a trace.
+- **Requests rejected before routing** (invalid JSON, oversized bodies, a charset other than UTF-8, cross-site writes) never reach the request logger. The error filter logs them instead, with the client IP, so every request leaves a trace.
 - **Health checks are not logged.** Container health probes would drown everything else.
 
 ## Web app
@@ -264,29 +275,35 @@ src/shared     HTTP client, design tokens, UI components
 ```
 
 - **The session lives in memory** ([`session-store.ts`](../apps/web/src/features/auth/session-store.ts)), read by components through `useSyncExternalStore`. Nothing goes to `localStorage`. A reload restores the session with one refresh call, using the cookie.
-- **Guards are route middleware** ([`guards.ts`](../apps/web/src/features/auth/guards.ts)). They run top-down before any loader. The root settles the session once per page load, `/app` requires a session, and the sign-in and sign-up pages send a signed-in user to `/app`. Because the boot refresh runs in middleware rather than in an effect, React's StrictMode can't send it twice.
+- **Guards are route middleware** ([`guards.ts`](../apps/web/src/features/auth/guards.ts)). They run top-down before any loader. The root settles the session once per page load, `/app` requires a session, and the sign-in and sign-up pages send a signed-in user to `/app`. Because the boot refresh runs in middleware rather than in an effect, React's StrictMode can't send it twice. The guards answer with `replace`, not `redirect`, so Back never lands on a page that sends the user forward again.
 - **One refresh at a time** ([`session.ts`](../apps/web/src/features/auth/session.ts)). Callers in a tab share one request, and tabs take turns through a Web Lock, each sending the cookie the previous tab received. A legitimate user therefore never trips reuse detection.
-- **A 401 gets one retry** ([`authorized-request.ts`](../apps/web/src/features/auth/authorized-request.ts)). When the access token has expired, the client refreshes and repeats the call once. If the session is over, the user is sent to sign in.
+- **A 401 gets one retry** ([`authorized-request.ts`](../apps/web/src/features/auth/authorized-request.ts)). When the access token has expired, the client refreshes and repeats the call once. If the session is over, or even the fresh token is refused, the session ends and the user is sent to sign in. Otherwise the sign-in guard, still seeing a session, would send them straight back, in a loop.
+- **Tabs follow each other** ([`session-channel.ts`](../apps/web/src/features/auth/session-channel.ts)). Each tab keeps its session in memory, but all of them share the refresh cookie. A tab that signs in or out says so on a `BroadcastChannel`. The others end their session, or pick it up from the cookie, then run their guards again in place: the welcome page moves to sign-in, and sign-in moves to the app.
 - **Every response is checked** against the contract schemas, and errors are parsed as problem details. A body that doesn't match becomes an `UNEXPECTED_RESPONSE` error instead of bad data on screen.
-- **Server errors land where the user looks** ([`form-errors.ts`](../apps/web/src/features/auth/form-errors.ts)). `EMAIL_ALREADY_REGISTERED` and `VALIDATION_FAILED` go on their fields. Everything else becomes one message above the button. Focus moves to the first problem.
-- **Sign-out asks the server first.** If that call fails, the user stays signed in and is told so. Clearing only the browser's memory would leave a cookie that signs them back in on the next reload.
-- **Design:** paper and ink, with one vermilion accent kept for errors, focus and the current page. Colours are CSS variables for light and dark ([`tokens.css`](../apps/web/src/shared/styles/tokens.css)), and a unit test checks every text and control pair against WCAG AA. The fonts (Fraunces and IBM Plex Mono) are bundled, not loaded from a CDN, so the strict CSP holds.
+- **Requests give up after 10 seconds** ([`request.ts`](../apps/web/src/shared/http/request.ts)), so a server that never answers can't leave a form waiting. A refresh waits 60 seconds, as long as nginx waits for the API ([`auth-api.ts`](../apps/web/src/features/auth/auth-api.ts)): one abandoned sooner may still rotate the token on the server, and the next refresh would then send the retired token and be taken for theft. The time limit and the caller's own cancel signal are joined by hand: `AbortSignal.any` is newer than some browsers the build targets (Safari 16.4, Chrome 111, Firefox 114).
+- **Server errors land where the user looks** ([`form-errors.ts`](../apps/web/src/features/auth/form-errors.ts)). `EMAIL_ALREADY_REGISTERED` and `VALIDATION_FAILED` go on their fields. Everything else becomes one message above the button. Focus moves to the first problem. The words are the app's own: each error `code` has a sentence written for the form, and the server's `detail`, written for developers, is never shown. A new code fails the typecheck until it has one.
+- **A page that can't load says so** ([`RouteErrorPage.tsx`](../apps/web/src/pages/error/RouteErrorPage.tsx)), inside the usual frame. When the server is unreachable or rate limiting, Try again opens the page again, session check included. Anything else offers a reload.
+- **Buttons keep focus while they work** ([`Button.tsx`](../apps/web/src/shared/ui/Button.tsx)). A pending button is `aria-disabled`, not `disabled`, so keyboard and screen reader users keep their place, and a second press does nothing.
+- **Sign-out asks the server first.** If that call fails, the user stays signed in and is told so, with focus still on Sign out. Clearing only the browser's memory would leave a cookie that signs them back in on the next reload.
+- **Design:** paper and ink, with one vermilion accent kept for errors, focus and the current page. Colours are CSS variables for light and dark ([`tokens.css`](../apps/web/src/shared/styles/tokens.css)), and a unit test checks every text and control pair against WCAG AA. The fonts (Fraunces and IBM Plex Mono) are bundled, not loaded from a CDN, so the strict CSP holds. On touch screens, the masthead links and the form buttons are at least 44px square.
 - **Zod runs without eval** ([`zod-config.ts`](../apps/web/src/app/zod-config.ts)). Zod checks whether it may compile parsers with `new Function`, and under the CSP that check alone logs a violation. Jitless mode skips it. A browser test fails on any CSP violation.
 
 ## Testing
 
-| Level          | What it proves                                                                                                         | Tools                                    |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| Contracts      | every validation rule, including emoji in passwords and MongoDB operators as values                                    | Vitest                                   |
-| API unit       | every branch of every service, the guard, the error filter, config, middleware                                         | Vitest, in-memory repository fakes       |
-| API end-to-end | the real app, built by the same `createApp()` as production, against a real MongoDB                                    | Vitest, supertest, mongodb-memory-server |
-| Live run       | the production Docker image against MongoDB 8.2, recorded call by call                                                 | [E2E test report](E2E_TEST_REPORT.md)    |
-| Web unit       | the session, refresh and retry logic, both forms, the route guards, colour contrast                                    | Vitest, Testing Library, MSW             |
-| Browser        | the journey through nginx, route guards, form errors, accessibility (axe, WCAG 2.2 AA, both themes), no CSP violations | Playwright, axe-core                     |
+| Level          | What it proves                                                                                                                                                                                    | Tools                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Contracts      | every validation rule, including emoji in passwords and MongoDB operators as values                                                                                                               | Vitest                                   |
+| API unit       | every branch of every service, the guard, the error filter, config, middleware                                                                                                                    | Vitest, in-memory repository fakes       |
+| API end-to-end | the real app, built by the same `createApp()` as production, against a real MongoDB                                                                                                               | Vitest, supertest, mongodb-memory-server |
+| Live run       | the production Docker image against MongoDB 8.2, recorded call by call                                                                                                                            | [E2E test report](E2E_TEST_REPORT.md)    |
+| Web unit       | the session, refresh and retry logic, tabs following each other, request time limits, both forms, the route guards, the error page, colour contrast                                               | Vitest, Testing Library, MSW             |
+| Browser        | the journey through nginx, route guards, form errors, two tabs, accessibility (axe, WCAG 2.2 AA, both themes; reflow at 320px; touch targets), no CSP violations, nginx caching and Origin checks | Playwright, axe-core                     |
+| Images         | no HIGH or CRITICAL vulnerability with a fix, in either image                                                                                                                                     | Trivy, in CI                             |
 
 ## Trade-offs and next steps
 
 - **No refresh grace period.** A token presented twice ends the session, even when the cause is two tabs refreshing at the same moment rather than theft. The strict rule is the safer default, and the web client avoids the race by refreshing one tab at a time. A short grace window would trade some of that safety for tolerance of flaky networks.
+- **Sign-out doesn't revoke the access token.** A copy taken before sign-out works until it expires, 15 minutes at most. A `jti` denylist would close that window at the cost of a lookup on every request.
 - **A sliding session.** An active user stays signed in indefinitely. An absolute limit (for example, 30 days since sign-in) would go on the family.
 - **409 on sign-up.** Telling a person that their email is already registered is what the form needs, but it reveals that the account exists. The rate limit slows enumeration. Email verification with a neutral answer would close it.
 - **Per-IP limits only.** Rate limits live in memory, so they are per instance. Running several API instances would need a shared store (Redis) for the throttler, and per-account lockout would complement the per-IP limit.
