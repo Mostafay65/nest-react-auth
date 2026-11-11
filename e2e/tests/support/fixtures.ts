@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { test as base, type ConsoleMessage, expect } from '@playwright/test';
+import { test as base, type ConsoleMessage, expect, type Page } from '@playwright/test';
 
 export interface Account {
   name: string;
@@ -27,6 +27,8 @@ interface TestFixtures {
    * as a [value, options] fixture tuple.)
    */
   expectedApiErrors: readonly string[];
+  /** Opens another tab in the same browser, sharing cookies, watched for errors like `page`. */
+  openTab: () => Promise<Page>;
 }
 
 interface WorkerFixtures {
@@ -37,28 +39,20 @@ interface WorkerFixtures {
 export const test = base.extend<TestFixtures, WorkerFixtures>({
   expectedApiErrors: [[GUEST_REFRESH], { option: true }],
 
-  // Fails the test on an uncaught exception, a console error or a CSP violation.
   page: async ({ page, expectedApiErrors }, use) => {
-    const problems: string[] = [];
-    page.on('pageerror', (error) => problems.push(`uncaught ${error.name}: ${error.message}`));
-    page.on('console', (message) => {
-      if (message.type() !== 'error') return;
-      if (isExpectedApiError(message, expectedApiErrors)) return;
-      problems.push(`console.error: ${message.text()}`);
-    });
-    // Playwright injects this script outside the page's CSP, so it can report on it.
-    await page.addInitScript(() => {
-      document.addEventListener('securitypolicyviolation', (event) => {
-        const source = `${event.sourceFile}:${event.lineNumber}:${event.columnNumber}`;
-        console.error(
-          `CSP violation: ${event.violatedDirective} blocked ${event.blockedURI} at ${source}`,
-        );
-      });
-    });
-
+    const problems = await watchForErrors(page, expectedApiErrors);
     await use(page);
-
     expect(problems, 'errors the page reported').toEqual([]);
+  },
+
+  openTab: async ({ context, expectedApiErrors }, use) => {
+    const reports: string[][] = [];
+    await use(async () => {
+      const tab = await context.newPage();
+      reports.push(await watchForErrors(tab, expectedApiErrors));
+      return tab;
+    });
+    expect(reports.flat(), 'errors the other tabs reported').toEqual([]);
   },
 
   account: [
@@ -75,6 +69,30 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 });
 
 export { expect };
+
+/**
+ * Collects what a page reports: uncaught exceptions, CSP violations, and
+ * console errors other than the expected failed API calls.
+ */
+async function watchForErrors(page: Page, expectedApiErrors: readonly string[]): Promise<string[]> {
+  const problems: string[] = [];
+  page.on('pageerror', (error) => problems.push(`uncaught ${error.name}: ${error.message}`));
+  page.on('console', (message) => {
+    if (message.type() !== 'error') return;
+    if (isExpectedApiError(message, expectedApiErrors)) return;
+    problems.push(`console.error: ${message.text()}`);
+  });
+  // Playwright injects this script outside the page's CSP, so it can report on it.
+  await page.addInitScript(() => {
+    document.addEventListener('securitypolicyviolation', (event) => {
+      const source = `${event.sourceFile}:${event.lineNumber}:${event.columnNumber}`;
+      console.error(
+        `CSP violation: ${event.violatedDirective} blocked ${event.blockedURI} at ${source}`,
+      );
+    });
+  });
+  return problems;
+}
 
 const FAILED_CALL = /^Failed to load resource: the server responded with a status of (\d{3})\b/;
 

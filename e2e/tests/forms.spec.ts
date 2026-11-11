@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { field, signInThroughForm, signUpThroughForm } from './support/app.js';
 import { expect, GUEST_REFRESH, test } from './support/fixtures.js';
 
@@ -8,6 +8,16 @@ const PASSWORD_RULES = [
   'One number',
   'One special character',
 ] as const;
+
+/**
+ * How far the focus bar under a field has grown, from 0 (hidden) to 1 (full
+ * width). TextField.module.css draws it as the `::after` of the input's line.
+ */
+const focusBar = (input: Locator): Promise<number> =>
+  input.evaluate((element) => {
+    const line = element.parentElement ?? element;
+    return new DOMMatrix(getComputedStyle(line, '::after').transform).a;
+  });
 
 /** Each checklist item ends in a hidden ", done" or ", not yet" for screen readers. */
 async function expectRulesMet(page: Page, met: readonly string[]): Promise<void> {
@@ -31,6 +41,10 @@ test.describe('sign-up form', () => {
       await expect(field(page, label)).toHaveAttribute('aria-invalid', 'true');
     }
     await expect(field(page, 'Name')).toBeFocused();
+
+    // Focus still shows on a field already marked invalid: only the focused one draws the bar.
+    await expect.poll(() => focusBar(field(page, 'Name'))).toBe(1);
+    expect(await focusBar(field(page, 'Email'))).toBe(0);
   });
 
   test('the password checklist ticks each rule off as it is met', async ({ page }) => {
@@ -55,10 +69,7 @@ test.describe('sign-up form', () => {
   test.describe('with an email that is already registered', () => {
     test.use({ expectedApiErrors: [GUEST_REFRESH, '409 /api/v1/auth/sign-up'] });
 
-    test('shows the server message on the email field and focuses it', async ({
-      page,
-      account,
-    }) => {
+    test('says so on the email field and focuses it', async ({ page, account }) => {
       await page.goto('/sign-up');
       // In capitals: an email names one account whatever its letter case.
       await signUpThroughForm(page, { ...account, email: account.email.toUpperCase() });

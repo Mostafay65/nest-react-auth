@@ -8,7 +8,7 @@ export default defineConfig({
   testDir: './tests',
   // The API allows 10 sign-ups and 10 sign-ins per minute per client IP, and
   // nginx sets that IP, so tests can't spread their calls across addresses. One
-  // worker and no retries keep a run at 3 sign-ups and 4 sign-ins.
+  // worker and no retries keep a run at 4 sign-ups and 7 sign-ins.
   workers: 1,
   retries: 0,
   forbidOnly: Boolean(process.env.CI),

@@ -29,3 +29,40 @@ test('no page load trips the content security policy, a caught eval included', a
 
   expect(violations).toEqual([]);
 });
+
+// Without Sec-Fetch-Site (an API client, an older browser), the API compares Origin
+// with Host, so nginx has to pass the Host on with its port.
+test('a write that carries only an Origin is checked against the right host', async ({
+  request,
+  baseURL,
+}) => {
+  const ownOrigin = new URL(baseURL ?? '').origin;
+
+  const fromThisSite = await request.post('/api/v1/auth/sign-out', {
+    headers: { Origin: ownOrigin },
+  });
+  const fromAnotherSite = await request.post('/api/v1/auth/sign-out', {
+    headers: { Origin: 'https://evil.example' },
+  });
+
+  expect(fromThisSite.status()).toBe(204);
+  expect(fromAnotherSite.status()).toBe(403);
+});
+
+test('assets are cached for good, but a missing one is not cached at all', async ({ request }) => {
+  const html = await (await request.get('/')).text();
+  const script = /\/assets\/[\w.-]+\.js/.exec(html)?.[0];
+  expect(script, 'a script in index.html').toBeDefined();
+
+  const asset = await request.get(script ?? '', { headers: { 'Accept-Encoding': 'gzip' } });
+  const missing = await request.get('/assets/no-such-file.js');
+
+  expect(asset.headers()).toMatchObject({
+    'cache-control': 'public, max-age=31536000, immutable',
+    'content-encoding': 'gzip',
+    // So a shared cache never hands the compressed copy to a client that can't read it.
+    vary: 'Accept-Encoding',
+  });
+  expect(missing.status()).toBe(404);
+  expect(missing.headers()['cache-control']).toBeUndefined();
+});
