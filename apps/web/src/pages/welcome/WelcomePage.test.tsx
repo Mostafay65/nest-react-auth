@@ -56,6 +56,34 @@ describe('Welcome page', () => {
     expect(router.state.location.pathname).toBe('/app');
   });
 
+  it('keeps focus on Sign out while it works and after it fails, so the user can try again', async () => {
+    // The server holds its answer until the test has checked the pending button.
+    let answer = () => {};
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    server.use(
+      respond.refreshSignedIn(),
+      respond.profile(),
+      http.post(endpoints.signOut, async () => {
+        await answered;
+        return HttpResponse.error();
+      }),
+    );
+    const { user } = await openWelcome();
+    const button = screen.getByRole('button', { name: 'Sign out' });
+
+    await user.click(button);
+    expect(button).toHaveTextContent('Signing out…');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveFocus();
+    answer();
+
+    await screen.findByRole('alert');
+    expect(button).toHaveFocus();
+    expect(button).not.toHaveAttribute('aria-disabled');
+  });
+
   it('goes back to sign-in when the session ends while the page loads', async () => {
     server.use(
       // The boot refresh succeeds, but the session is revoked before the profile loads.

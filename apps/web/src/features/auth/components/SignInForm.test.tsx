@@ -33,10 +33,10 @@ describe('Sign-in form', () => {
     expect(document.title).toBe('Welcome · Auth Module');
   });
 
-  it('says the email or password is wrong, without saying which', async () => {
+  it('says the email or password is wrong, without saying which, in its own words', async () => {
     server.use(
       http.post(endpoints.signIn, () =>
-        problem(401, 'INVALID_CREDENTIALS', 'The email or password is incorrect.'),
+        problem(401, 'INVALID_CREDENTIALS', 'Credentials rejected by the auth service.'),
       ),
     );
 
@@ -44,8 +44,46 @@ describe('Sign-in form', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('The email or password is incorrect.');
+    expect(alert).not.toHaveTextContent('Credentials rejected');
     await waitFor(() => expect(alert).toHaveFocus());
     expect(screen.getByLabelText('Email')).toBeValid();
+  });
+
+  it('keeps focus on the button while signing in, and signs in once however often it is pressed', async () => {
+    // The server holds its answer until the test has pressed the button again.
+    let answer = () => {};
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    let requests = 0;
+    server.use(
+      http.post(endpoints.signIn, async () => {
+        requests += 1;
+        await answered;
+        return problem(401, 'INVALID_CREDENTIALS', 'The email or password is incorrect.');
+      }),
+    );
+
+    const { user } = await signInWith('ada@example.com', 'Analytical1!');
+
+    const button = screen.getByRole('button', { name: 'Signing in…' });
+    expect(button).toHaveFocus();
+    expect(button).toBeEnabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    await user.click(button);
+    await user.type(screen.getByLabelText('Password'), '{Enter}');
+    answer();
+
+    await screen.findByRole('alert');
+    expect(requests).toBe(1);
+    expect(screen.getByRole('button', { name: 'Sign in' })).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('lets password managers fill and save the email as the username', async () => {
+    renderApp('/sign-in');
+
+    expect(await screen.findByLabelText('Email')).toHaveAttribute('autocomplete', 'username');
+    expect(screen.getByLabelText('Email')).toHaveAttribute('type', 'email');
   });
 
   it('asks the user to wait when the API is rate limiting', async () => {

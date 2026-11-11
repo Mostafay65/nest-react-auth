@@ -2,8 +2,8 @@ import type { ReactNode } from 'react';
 import styles from './Spread.module.css';
 
 interface SpreadProps {
-  /** A section number such as `01`, set above the title. */
-  index: string;
+  /** A section number such as `01`, set above the title. Pages outside the index have none. */
+  index?: string;
   title: string;
   lede: ReactNode;
   children: ReactNode;
@@ -17,7 +17,7 @@ export function Spread({ index, title, lede, children }: SpreadProps) {
   return (
     <section className={styles.spread} aria-labelledby="page-title">
       <div className={styles.intro}>
-        <p className={styles.index}>Nº {index}</p>
+        {index && <p className={styles.index}>Nº {index}</p>}
         <h1 id="page-title" className={styles.title} tabIndex={-1}>
           {title}
         </h1>

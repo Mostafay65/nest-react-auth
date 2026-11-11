@@ -26,12 +26,12 @@ export function SignUpForm() {
     defaultValues: { name: '', email: '', password: '' },
   });
   const password = useWatch({ control, name: 'password' });
-  const { startSession, alert, alertRef } = useStartSession(FIELDS, setError, setFocus);
+  const { submit, alert, alertRef } = useStartSession(FIELDS, setError, setFocus);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const passwordId = useId();
   const checklistId = useId();
 
-  const onSubmit = handleSubmit((values) => startSession(() => authApi.signUp(values)));
+  const onSubmit = handleSubmit((values) => submit(() => authApi.signUp(values)));
 
   return (
     <form className={styles.form} onSubmit={onSubmit} noValidate>
@@ -44,7 +44,8 @@ export function SignUpForm() {
       <TextField
         label="Email"
         type="email"
-        autoComplete="email"
+        // The email is the account's username: password managers fill and save it with the password.
+        autoComplete="username"
         autoCapitalize="none"
         spellCheck={false}
         error={errors.email?.message}
@@ -75,7 +76,7 @@ export function SignUpForm() {
 
       {alert && <FormAlert ref={alertRef} title="Your account was not created" message={alert} />}
 
-      <Button type="submit" className={styles.submit} disabled={isSubmitting}>
+      <Button type="submit" className={styles.submit} pending={isSubmitting}>
         {isSubmitting ? 'Creating your account…' : 'Create account'}
       </Button>
     </form>

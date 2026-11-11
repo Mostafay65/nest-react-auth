@@ -43,3 +43,27 @@
 .entry[aria-current='page'] .number {
   color: var(--accent);
 }
+
+/*
+ * On touch screens each link gets a target at least 44px tall without moving
+ * anything: padding grows the target and an equal negative margin gives the
+ * space back. The wordmark grows up into the masthead's top padding and the
+ * index down into its bottom padding, so on a phone, where the index wraps
+ * below the wordmark, the two targets meet instead of overlapping.
+ */
+@media (pointer: coarse) {
+  .wordmark,
+  .entry {
+    display: inline-block;
+  }
+
+  .wordmark {
+    padding-block: 1.25rem 0.5rem;
+    margin-block: -1.25rem -0.5rem;
+  }
+
+  .entry {
+    padding-block: 0.25rem 1.5rem;
+    margin-block: -0.25rem -1.5rem;
+  }
+}

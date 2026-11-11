@@ -40,7 +40,7 @@ export const sessionStore = {
     publish(SIGNED_OUT);
   },
 
-  /** Back to "not checked yet". Only tests need this. */
+  /** Back to "not checked yet", so the next navigation restores the session from the cookie. */
   reset(): void {
     publish(UNKNOWN);
   },

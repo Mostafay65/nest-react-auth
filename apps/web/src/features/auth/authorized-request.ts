@@ -21,6 +21,15 @@ export async function authorizedJson<T>(
     return await call();
   } catch (error) {
     if (!isUnauthorized(error) || !(await refreshSession())) throw error;
-    return call();
+  }
+
+  try {
+    return await call();
+  } catch (error) {
+    // Even a fresh token was refused, so the session is no use. Ending it keeps
+    // the user on sign-in; otherwise the sign-in guard, seeing a session, would
+    // send them straight back here to fail again, in a loop.
+    if (isUnauthorized(error)) sessionStore.end();
+    throw error;
   }
 }

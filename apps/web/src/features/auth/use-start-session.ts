@@ -4,7 +4,7 @@ import type { FieldValues, Path, UseFormSetError, UseFormSetFocus } from 'react-
 import { useNavigate } from 'react-router';
 import { paths } from '@/shared/paths';
 import { placeServerError } from './form-errors';
-import { sessionStore } from './session-store';
+import { startSession } from './session';
 
 /**
  * The submit step shared by sign-in and sign-up: start the session and open
@@ -24,10 +24,10 @@ export function useStartSession<T extends FieldValues>(
     if (alert) alertRef.current?.focus();
   }, [alert]);
 
-  async function startSession(request: () => Promise<AuthSession>): Promise<void> {
+  async function submit(request: () => Promise<AuthSession>): Promise<void> {
     setAlert(null);
     try {
-      sessionStore.start(await request());
+      startSession(await request());
       await navigate(paths.app, { replace: true });
     } catch (error) {
       const failure = placeServerError(error, fields, setError);
@@ -36,5 +36,5 @@ export function useStartSession<T extends FieldValues>(
     }
   }
 
-  return { startSession, alert, alertRef };
+  return { submit, alert, alertRef };
 }

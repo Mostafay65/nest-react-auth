@@ -23,18 +23,19 @@ export function SignInForm() {
     resolver: zodResolver(signInSchema),
     defaultValues: { email: '', password: '' },
   });
-  const { startSession, alert, alertRef } = useStartSession(FIELDS, setError, setFocus);
+  const { submit, alert, alertRef } = useStartSession(FIELDS, setError, setFocus);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const passwordId = useId();
 
-  const onSubmit = handleSubmit((values) => startSession(() => authApi.signIn(values)));
+  const onSubmit = handleSubmit((values) => submit(() => authApi.signIn(values)));
 
   return (
     <form className={styles.form} onSubmit={onSubmit} noValidate>
       <TextField
         label="Email"
         type="email"
-        autoComplete="email"
+        // The email is the account's username: password managers fill and save it with the password.
+        autoComplete="username"
         autoCapitalize="none"
         spellCheck={false}
         error={errors.email?.message}
@@ -58,7 +59,7 @@ export function SignInForm() {
 
       {alert && <FormAlert ref={alertRef} title="You are not signed in" message={alert} />}
 
-      <Button type="submit" className={styles.submit} disabled={isSubmitting}>
+      <Button type="submit" className={styles.submit} pending={isSubmitting}>
         {isSubmitting ? 'Signing in…' : 'Sign in'}
       </Button>
     </form>

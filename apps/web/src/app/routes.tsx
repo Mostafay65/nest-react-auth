@@ -6,13 +6,12 @@ import {
   settleSession,
 } from '@/features/auth/guards';
 import { BootScreen } from '@/pages/boot/BootScreen';
-import { RouteErrorPage } from '@/pages/error/RouteErrorPage';
 import { NotFoundPage } from '@/pages/not-found/NotFoundPage';
 import { SignInPage } from '@/pages/sign-in/SignInPage';
 import { SignUpPage } from '@/pages/sign-up/SignUpPage';
 import { welcomeLoader } from '@/pages/welcome/welcome.loader';
 import { WelcomePage } from '@/pages/welcome/WelcomePage';
-import { Frame } from './Frame';
+import { ErrorFrame, Frame } from './Frame';
 
 /**
  * Guards are route middleware, not loaders: loaders run in parallel, so a
@@ -23,7 +22,7 @@ import { Frame } from './Frame';
 export const routes: RouteObject[] = [
   {
     Component: Frame,
-    ErrorBoundary: RouteErrorPage,
+    ErrorBoundary: ErrorFrame,
     HydrateFallback: BootScreen,
     middleware: [settleSession],
     children: [

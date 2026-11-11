@@ -12,7 +12,11 @@
   color: var(--ink);
 }
 
-/* The underline is the field's only outline; on focus a vermilion bar grows along it. */
+/*
+ * The underline is the field's only outline. An invalid field's line turns
+ * vermilion; on focus a heavier vermilion bar grows along it, so focus still
+ * shows on a field that is already marked invalid.
+ */
 .control {
   position: relative;
   display: flex;
@@ -21,18 +25,21 @@
   border-bottom: 1px solid var(--field-rule);
 }
 
+.invalid .control {
+  border-bottom-color: var(--accent);
+}
+
 .control::after {
   content: '';
   position: absolute;
   inset: auto 0 -1px;
-  height: 2px;
+  height: 3px;
   background: var(--accent);
   transform: scaleX(0);
   transform-origin: left center;
 }
 
-.control:focus-within::after,
-.invalid .control::after {
+.control:focus-within::after {
   transform: scaleX(1);
 }
 

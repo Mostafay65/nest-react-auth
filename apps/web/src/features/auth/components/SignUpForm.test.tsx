@@ -67,6 +67,16 @@ describe('Sign-up form', () => {
     expect(screen.getByText('4 of 4 password rules met')).toBeInTheDocument();
   });
 
+  it('judges the password as the API does, after normalising it', async () => {
+    const { user } = await openSignUp();
+    await user.click(screen.getByLabelText('Password'));
+
+    // Eleven code points as typed, but each "e" and its accent become one "é": seven in all.
+    await user.paste('é'.repeat(4) + 'a1!');
+
+    expect(checklist()[0]).toBe('At least 8 characters, not yet');
+  });
+
   it('lets the user see the password they typed', async () => {
     const { user } = await openSignUp();
     const password = screen.getByLabelText('Password');
@@ -78,10 +88,10 @@ describe('Sign-up form', () => {
     expect(password).toHaveAttribute('type', 'password');
   });
 
-  it('puts "email already registered" on the email field', async () => {
+  it('puts "email already registered" on the email field, in its own words', async () => {
     server.use(
       http.post(endpoints.signUp, () =>
-        problem(409, 'EMAIL_ALREADY_REGISTERED', 'An account with this email already exists.'),
+        problem(409, 'EMAIL_ALREADY_REGISTERED', 'Duplicate key: users.email_1'),
       ),
     );
     const { user } = await openSignUp();
@@ -117,6 +127,31 @@ describe('Sign-up form', () => {
     expect(password).toHaveAccessibleDescription(
       expect.stringContaining('Password must contain at least one number'),
     );
+  });
+
+  it('explains a rejection the server could not pin on a field, in its own words', async () => {
+    server.use(
+      http.post(endpoints.signUp, () =>
+        problem(400, 'VALIDATION_FAILED', 'The request is invalid.'),
+      ),
+    );
+    const { user } = await openSignUp();
+
+    await user.type(screen.getByLabelText('Name'), 'Ada Lovelace');
+    await user.type(screen.getByLabelText('Email'), 'ada@example.com');
+    await user.type(screen.getByLabelText('Password'), 'Analytical1!');
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Some of these details were not accepted. Check them and try again.',
+    );
+  });
+
+  it('lets password managers save the email as the username, with the new password', async () => {
+    await openSignUp();
+
+    expect(screen.getByLabelText('Email')).toHaveAttribute('autocomplete', 'username');
+    expect(screen.getByLabelText('Password')).toHaveAttribute('autocomplete', 'new-password');
   });
 
   it('says so calmly when the server cannot be reached', async () => {

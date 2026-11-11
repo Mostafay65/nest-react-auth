@@ -1,4 +1,4 @@
-import { PASSWORD_RULES } from '@nest-react-auth/contracts';
+import { normalizePassword, PASSWORD_RULES } from '@nest-react-auth/contracts';
 import { cx } from '@/shared/ui/cx';
 import styles from './PasswordChecklist.module.css';
 
@@ -11,7 +11,9 @@ interface PasswordChecklistProps {
 
 /** The API's own password rules, ticked off as the user types. */
 export function PasswordChecklist({ id, password, showMissing }: PasswordChecklistProps) {
-  const rules = PASSWORD_RULES.map((rule) => ({ ...rule, met: rule.test(password) }));
+  // The API judges the normalised password, so the checklist does too.
+  const normalized = normalizePassword(password);
+  const rules = PASSWORD_RULES.map((rule) => ({ ...rule, met: rule.test(normalized) }));
   const metCount = rules.filter((rule) => rule.met).length;
   const headingId = `${id}-heading`;
 

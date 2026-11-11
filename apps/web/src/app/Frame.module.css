@@ -30,14 +30,3 @@
     opacity: 0;
   }
 }
-
-.colophon {
-  composes: label from '../shared/styles/type.module.css';
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.5rem 2rem;
-  padding: 1.25rem var(--gutter) 1.5rem;
-  border-top: 1px solid var(--rule);
-  color: var(--ink-muted);
-}

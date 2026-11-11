@@ -55,7 +55,8 @@ export function WelcomePage() {
         </dl>
 
         <div className={styles.actions}>
-          <Button variant="text" onClick={handleSignOut} disabled={signingOut}>
+          {/* `pending`, not `disabled`: if signing out fails, focus is still on the button. */}
+          <Button variant="text" onClick={handleSignOut} pending={signingOut}>
             {signingOut ? 'Signing out…' : 'Sign out'}
           </Button>
           {signOutFailed && (

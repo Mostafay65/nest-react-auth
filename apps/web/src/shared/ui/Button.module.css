@@ -32,8 +32,9 @@
   color: var(--ink);
 }
 
-.solid:disabled,
-.text:disabled {
+/* Pending: see `pending` in Button.tsx. */
+.solid[aria-disabled='true'],
+.text[aria-disabled='true'] {
   cursor: progress;
   opacity: 0.72;
 }
@@ -50,8 +51,8 @@
     transition: transform var(--duration) var(--ease-out);
   }
 
-  .solid:hover:not(:disabled) .arrow,
-  .text:hover:not(:disabled) .arrow {
+  .solid:hover:not([aria-disabled='true']) .arrow,
+  .text:hover:not([aria-disabled='true']) .arrow {
     transform: translateX(0.3rem);
   }
 }
