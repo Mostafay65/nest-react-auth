@@ -119,13 +119,14 @@ test.describe('on a phone', () => {
   }
 
   // The "Create one" link sits inside a sentence, which WCAG's target-size rules exempt.
-  test('the masthead links and the form buttons are at least 44px square to the touch', async ({
+  test('the masthead links, the theme button and the form buttons are at least 44px square to the touch', async ({
     page,
   }) => {
     await page.goto('/sign-in');
     await expect(heading(page)).toHaveText('Sign in.');
 
     await expectTouchTarget(page.getByRole('link', { name: 'Auth Module' }), 'the wordmark');
+    await expectTouchTarget(page.getByRole('button', { name: 'Theme: Auto' }), 'the theme button');
     for (const name of ['Sign in', 'Create account']) {
       await expectTouchTarget(
         page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name }),
