@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Built from the repository root: docker build -f apps/web/Dockerfile .
 
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 ENV HUSKY=0
 # Every workspace manifest is needed for npm to read the lockfile.
