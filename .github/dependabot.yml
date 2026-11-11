@@ -38,3 +38,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # A new MongoDB major is a deliberate move: the docs, the recorded run and the
+      # test database (mongodb-memory-server) all name 8.2, and they move together.
+      - dependency-name: mongo
+        update-types: [version-update:semver-major]
