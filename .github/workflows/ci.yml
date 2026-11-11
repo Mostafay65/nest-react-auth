@@ -10,7 +10,10 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A new push to a pull request replaces the run in progress. A run on main is never
+  # stopped once started; one still waiting gives way to a newer push, so the newest
+  # commit on main is always the one published.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   # Git hooks are for local commits only.
@@ -60,9 +63,9 @@ jobs:
       - run: npm run test:e2e
 
   stack:
-    name: Docker stack and browser tests
+    name: Docker stack, browser tests and image scan
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
         with:
@@ -72,8 +75,10 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # The README's quick start. On a fresh checkout it writes a random JWT secret
+      # to .env, so the run needs no repository secret.
       - name: Build and start MongoDB, the API and the web app
-        run: docker compose up --build --detach --wait
+        run: npm run stack:up
       - name: Smoke test through nginx
         run: |
           curl --fail --silent --show-error http://127.0.0.1:8080/api/health
@@ -91,6 +96,26 @@ jobs:
           name: playwright-report
           path: e2e/playwright-report/
           retention-days: 7
+      # Fails on a HIGH or CRITICAL vulnerability that has a fix, in the Alpine or npm
+      # packages of either image. The scanner image is pinned by digest.
+      - name: Scan the images (Trivy)
+        run: |
+          for image in nest-react-auth-api nest-react-auth-web; do
+            docker run --rm --volume /var/run/docker.sock:/var/run/docker.sock \
+              aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb \
+              image --quiet --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
+          done
+      # The publish job pushes these exact images rather than building new ones.
+      - name: Save the tested images
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker save --output images.tar nest-react-auth-api nest-react-auth-web
+      - name: Upload the tested images
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: images
+          path: images.tar
+          retention-days: 1
       - name: Container logs
         if: failure()
         run: docker compose logs
@@ -99,42 +124,35 @@ jobs:
         run: docker compose down --volumes
 
   publish:
-    name: Publish ${{ matrix.app }} image
+    name: Publish the tested images
     # Only for main, and only when every check above passed.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [checks, api-e2e, stack]
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     permissions:
       contents: read
       packages: write
-    strategy:
-      matrix:
-        app: [api, web]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
-          persist-credentials: false
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - id: meta
-        uses: docker/metadata-action@v6
-        with:
-          # metadata-action lower-cases the name, as registries require.
-          images: ghcr.io/${{ github.repository }}-${{ matrix.app }}
-          tags: |
-            type=sha
-            type=raw,value=latest
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: apps/${{ matrix.app }}/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.app }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+          name: images
+      - name: Load the images
+        run: docker load --input images.tar
+      - name: Push to GitHub Container Registry
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          # Registries need lower-case names.
+          base="ghcr.io/${REPOSITORY,,}"
+          for app in api web; do
+            for tag in latest "sha-${SHA::7}"; do
+              docker tag "nest-react-auth-$app" "$base-$app:$tag"
+              docker push "$base-$app:$tag"
+            done
+          done
+          docker logout ghcr.io

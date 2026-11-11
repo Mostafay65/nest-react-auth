@@ -27,3 +27,14 @@ updates:
       # A new Node major is a deliberate move, together with .nvmrc and CI.
       - dependency-name: node
         update-types: [version-update:semver-major]
+      # nginx's stable branches are the even minors (1.30) and mainline the odd ones
+      # (1.31). Dependabot can't tell them apart, so the yearly move to the next
+      # stable branch is made by hand. Patches need no PR: the 1.30 tag follows
+      # the branch's latest release, and every build pulls it.
+      - dependency-name: nginxinc/nginx-unprivileged
+        update-types: [version-update:semver-minor]
+  # The MongoDB image in docker-compose.yml.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
