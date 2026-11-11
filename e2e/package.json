@@ -5,13 +5,18 @@
   "description": "Playwright browser journeys and accessibility scans against the running stack.",
   "type": "module",
   "scripts": {
-    "test:browser": "playwright test",
-    "report": "playwright show-report"
+    "test:browser": "playwright test --project=chromium",
+    "screenshots": "playwright test --project=screenshots",
+    "report": "playwright show-report",
+    "lint": "oxlint -c ../.oxlintrc.json --type-aware --deny-warnings tests/ playwright.config.ts",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.65.0",
     "@types/node": "^24.19.2",
+    "oxlint": "^1.93.0",
+    "oxlint-tsgolint": "^7.0.2006",
     "typescript": "~6.0.3"
   }
 }

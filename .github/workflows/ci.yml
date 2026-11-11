@@ -60,19 +60,37 @@ jobs:
       - run: npm run test:e2e
 
   stack:
-    name: Docker stack
+    name: Docker stack and browser tests
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
       - name: Build and start MongoDB, the API and the web app
         run: docker compose up --build --detach --wait
       - name: Smoke test through nginx
         run: |
           curl --fail --silent --show-error http://127.0.0.1:8080/api/health
           curl --fail --silent --show-error http://127.0.0.1:8080/ | grep --quiet '<div id="root">'
+      # Not cached: Playwright's docs note that restoring the browser takes about
+      # as long as downloading it, and its system libraries need installing anyway.
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps --only-shell chromium
+      - name: Browser tests (Playwright and axe)
+        run: npm run test:browser
+      - name: Upload the Playwright report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7
       - name: Container logs
         if: failure()
         run: docker compose logs
