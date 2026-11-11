@@ -17,10 +17,10 @@ COPY apps/web apps/web
 RUN npm run build --workspace @nest-react-auth/contracts \
  && npm run build --workspace @nest-react-auth/web
 
-# Runs as an unprivileged user and listens on 8080. The slim variant has nginx and
-# its core libraries only; the full one adds curl, njs, and image and XSLT modules
-# that serving static files never uses. The upgrade picks up Alpine's security fixes.
-FROM nginxinc/nginx-unprivileged:1.29-alpine-slim AS runtime
+# nginx's stable branch, as an unprivileged user on port 8080. The slim variant has
+# nginx and its core libraries only; the full one adds curl, njs, and image and XSLT
+# modules that serving static files never uses. The upgrade picks up Alpine's fixes.
+FROM nginxinc/nginx-unprivileged:1.30-alpine-slim AS runtime
 USER root
 RUN apk upgrade --no-cache
 USER nginx

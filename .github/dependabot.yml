@@ -8,6 +8,13 @@ updates:
       # One pull request per week for minor and patch updates; majors stay separate.
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # @types/node follows the Node major in .nvmrc, not the newest Node.
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
+      # typescript-eslint supports TypeScript below 6.1 only, so TypeScript 7 waits for it.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -16,3 +23,7 @@ updates:
     directories: [/apps/api, /apps/web]
     schedule:
       interval: weekly
+    ignore:
+      # A new Node major is a deliberate move, together with .nvmrc and CI.
+      - dependency-name: node
+        update-types: [version-update:semver-major]
