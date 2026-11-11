@@ -21,7 +21,7 @@ How I used AI to build this submission: the tools, the prompts that worked, what
   Beyond the tests, a call-by-call recorded run against the production Docker image (repeated on the final image, with the same results), both images at 0 HIGH/CRITICAL vulnerabilities, and green CI.
 
 - **The review.** Three reviewers with no prior context reported 43 findings. 35 were fixed, and the rest were documented, accepted or kept, each with its reason. A fourth then read the whole change before it was committed and found 8 more, all fixed. See [Review triage](#review-triage).
-- **What was corrected.** The [correction log](#correction-log) has 33 entries: mistakes and gaps in the AI's work, and places where its memory of a library was out of date. Each says how it was caught:
+- **What was corrected.** The [correction log](#correction-log) has 34 entries: mistakes and gaps in the AI's work, and places where its memory of a library was out of date. Each says how it was caught:
   - tests, live runs and linters;
   - reading the libraries' current source instead of trusting the model's memory;
   - fresh-context review.
@@ -155,6 +155,7 @@ Each entry gives what was wrong, how it was caught, and what changed. The review
   - The web image moved to nginx's slim variant.
   - Both now have 0 HIGH/CRITICAL, and the web image went from 83 MB to 35 MB.
 - **An end-of-life nginx branch.** Dependabot proposed nginx 1.31. Checking the tags showed that the 1.29 branch we had pinned no longer gets fixes (stable is 1.30, mainline 1.31). The image moved to the stable branch.
+- **A gap in the update policy.** Once the MongoDB image was covered, Dependabot proposed MongoDB 9.0, and its checks passed. The config held back new Node majors but had no such rule for MongoDB, while the docs, the recorded run and the test database all name 8.2. MongoDB majors are now ignored, with the reason in the config, and the pull request was left for Dependabot to close.
 
 ### Caught by linters, Git and the agents' own checks
 
