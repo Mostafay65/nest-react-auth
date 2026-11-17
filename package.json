@@ -36,7 +36,7 @@
     "concurrently": "^10.0.7",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
-    "prettier": "^3.9.10"
+    "prettier": "^3.10.1"
   },
   "allowScripts": {
     "argon2@0.45.2": true,
